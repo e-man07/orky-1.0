@@ -10,7 +10,7 @@ import {
   ChevronRight,
   LogOut,
   BookOpen,
-  Database,
+  Settings,
   Package,
   Bot,
   GitBranch,

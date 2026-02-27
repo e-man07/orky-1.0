@@ -16,6 +16,7 @@ interface AppCardProps {
     category: string | null
     isConfigured: boolean
     comingSoon?: boolean
+    pro?: boolean
     _count?: { actions: number }
   }
   onConfigure: () => void
@@ -29,8 +30,8 @@ export function AppCard({ app, onConfigure, onViewActions }: AppCardProps) {
       transition={{ duration: 0.2 }}
     >
       <Card
-        className="group border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.12] transition-all duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.4)] cursor-pointer relative overflow-hidden"
-        onClick={onViewActions}
+        className={`group border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.12] transition-all duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.4)] relative overflow-hidden ${app.pro ? 'opacity-75' : 'cursor-pointer'}`}
+        onClick={app.pro ? undefined : onViewActions}
       >
         <CardContent className="p-5 flex flex-col items-center text-center">
           {/* Logo */}
@@ -56,9 +57,16 @@ export function AppCard({ app, onConfigure, onViewActions }: AppCardProps) {
             <span className="text-[10px] text-white/35 mb-2">{app.category}</span>
           )}
 
-          {/* Status badge — hides on hover, replaced by Configure (or Coming Soon) */}
+          {/* Status badge — hides on hover, replaced by Configure (or Coming Soon / Pro) */}
           <div className="mt-auto h-6 flex items-center justify-center">
-            {app.comingSoon ? (
+            {app.pro ? (
+              <Badge
+                variant="secondary"
+                className="text-[9px] px-1.5 py-0 bg-violet-500/10 text-violet-400/80 border-violet-500/20"
+              >
+                Comes with Pro
+              </Badge>
+            ) : app.comingSoon ? (
               <Badge
                 variant="secondary"
                 className="text-[9px] px-1.5 py-0 bg-amber-500/10 text-amber-400/70 border-amber-500/15"

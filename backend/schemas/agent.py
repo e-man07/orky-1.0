@@ -11,7 +11,7 @@ class AgentCreate(BaseModel):
     icon: str | None = None
     color: str | None = "#3B82F6"
     status: str = "active"
-    actionIds: list[int] | None = None
+    actionKeys: list[str] | None = None  # "appSlug:actionName" strings
 
 
 class AgentUpdate(BaseModel):
@@ -23,7 +23,7 @@ class AgentUpdate(BaseModel):
     icon: str | None = None
     color: str | None = None
     status: str | None = None
-    actionIds: list[int] | None = None
+    actionKeys: list[str] | None = None  # "appSlug:actionName" strings
 
 
 class AppInfo(BaseModel):

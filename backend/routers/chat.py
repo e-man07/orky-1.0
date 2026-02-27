@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +12,7 @@ from models.knowledge import ChatSession, ChatMessage, Execution
 from schemas.app import ChatInput
 from services.gemini import classify_intent, generate_chat_response
 from services.rag.pipeline import run_rag_pipeline
-from services.chat_orchestrator import execute_chat_actions
+from services.chat_orchestrator import execute_chat_actions, match_workflow, execute_workflow_from_chat
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -47,13 +49,22 @@ async def send_chat_message(
     db.add(execution)
     await db.flush()
 
-    # Classify intent
-    intent = await classify_intent(body.message)
+    # Classify intent + pre-generate embedding in parallel
+    import asyncio
+    from services.gemini import generate_embedding
+    t0 = time.time()
+    intent_task = asyncio.create_task(classify_intent(body.message))
+    embedding_task = asyncio.create_task(generate_embedding(body.message, "RETRIEVAL_QUERY"))
+    intent = await intent_task
+    print(f"[CHAT] Intent: {intent} ({time.time() - t0:.1f}s)")
     conversation_history = body.conversationHistory or []
 
     if intent == "kb_query":
-        # Run RAG pipeline
-        rag_result = await run_rag_pipeline(db, user.id, body.message, conversation_history)
+        # Run RAG pipeline with pre-computed embedding
+        query_embedding = await embedding_task
+        t1 = time.time()
+        rag_result = await run_rag_pipeline(db, user.id, body.message, conversation_history, query_embedding=query_embedding)
+        print(f"[CHAT] RAG pipeline done ({time.time() - t1:.1f}s) | Total: {time.time() - t0:.1f}s")
         response_text = rag_result["response"]
         sources = rag_result["sources"]
         status = rag_result["status"]
@@ -63,6 +74,7 @@ async def send_chat_message(
         execution.status = status
 
     elif intent == "conversational":
+        embedding_task.cancel()
         response_text = await generate_chat_response(
             "You are ORKY, a friendly AI assistant for enterprise employees. Be helpful, concise, and professional.",
             body.message,
@@ -75,10 +87,21 @@ async def send_chat_message(
         execution.status = "conversational"
 
     else:
-        # workflow/action intent — use the orchestrator
-        orchestrator_result = await execute_chat_actions(
-            db, user, body.message, conversation_history
-        )
+        embedding_task.cancel()
+        # workflow/action intent — check for matching saved workflow first
+        matched_workflow = await match_workflow(db, user, body.message)
+        workflow_execution_id = None
+
+        if matched_workflow:
+            orchestrator_result = await execute_workflow_from_chat(
+                db, user, matched_workflow, body.message
+            )
+            workflow_execution_id = orchestrator_result.workflow_execution_id
+        else:
+            orchestrator_result = await execute_chat_actions(
+                db, user, body.message, conversation_history
+            )
+
         response_text = orchestrator_result.response
         sources = []
         status = "action_completed" if orchestrator_result.actions_taken else "conversational"
@@ -118,6 +141,8 @@ async def send_chat_message(
     # Include actions_taken when workflow/action was executed
     if intent == "workflow":
         result["actionsTaken"] = actions_taken
+        if workflow_execution_id:
+            result["workflowExecutionId"] = workflow_execution_id
 
     return result
 

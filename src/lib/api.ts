@@ -2,9 +2,23 @@ import { getSession } from 'next-auth/react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-export async function apiFetch(path: string, options?: RequestInit) {
+let cachedToken: string | null = null
+let tokenFetchedAt = 0
+const TOKEN_TTL = 5 * 60 * 1000 // cache token for 5 minutes
+
+async function getToken(): Promise<string | null> {
+  const now = Date.now()
+  if (cachedToken && now - tokenFetchedAt < TOKEN_TTL) {
+    return cachedToken
+  }
   const session = await getSession()
-  const token = (session as any)?.jwtToken || (session as any)?.accessToken
+  cachedToken = (session as any)?.jwtToken || (session as any)?.accessToken || null
+  tokenFetchedAt = now
+  return cachedToken
+}
+
+export async function apiFetch(path: string, options?: RequestInit) {
+  const token = await getToken()
 
   const res = await fetch(`${API_URL}${path}`, {
     ...options,

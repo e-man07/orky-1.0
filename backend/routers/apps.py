@@ -101,3 +101,20 @@ async def save_credentials(
     await db.commit()
 
     return {"id": app.id, "name": app.name, "isConfigured": True}
+
+
+@router.post("/slug/{slug}/credentials")
+async def save_credentials_by_slug(
+    slug: str,
+    credentials: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(App).where(App.slug == slug))
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    app.credentials = credentials
+    await db.commit()
+
+    return {"id": app.id, "name": app.name, "isConfigured": True}

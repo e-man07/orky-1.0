@@ -13,9 +13,11 @@ async def vector_search(
     criteria_ids: list[int],
     similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
     top_k: int = DEFAULT_TOP_K,
+    query_embedding: list[float] | None = None,
 ) -> list[dict]:
     """Vector search with access control filtering."""
-    query_embedding = await generate_embedding(query, "RETRIEVAL_QUERY")
+    if query_embedding is None:
+        query_embedding = await generate_embedding(query, "RETRIEVAL_QUERY")
     embedding_str = json.dumps(query_embedding)
 
     result = await db.execute(
@@ -28,7 +30,7 @@ async def vector_search(
                 ka.number as "articleNumber",
                 ka.short_description as "shortDescription",
                 ka.category,
-                1 - (ac.embedding <=> :embedding::vector) AS similarity
+                1 - (ac.embedding <=> CAST(:embedding AS vector)) AS similarity
             FROM article_chunks ac
             JOIN knowledge_articles ka ON ac.article_id = ka.id
             WHERE ka.is_active = true
@@ -42,7 +44,7 @@ async def vector_search(
                         WHERE acr.article_id = ka.id AND acr.criteria_id = ANY(:criteria_ids)
                     )
                 )
-                AND 1 - (ac.embedding <=> :embedding::vector) >= :threshold
+                AND 1 - (ac.embedding <=> CAST(:embedding AS vector)) >= :threshold
             ORDER BY similarity DESC
             LIMIT :top_k
         """),

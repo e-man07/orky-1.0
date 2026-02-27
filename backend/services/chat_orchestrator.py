@@ -17,8 +17,10 @@ from google.genai import types
 
 from models.app import App, AppAction
 from models.user import User
-from services.gemini import generate_with_tools, generate_with_tools_chat
+from models.workflow import Workflow, WorkflowAgent, WorkflowExecution, StepExecution
+from services.gemini import generate_with_tools, generate_with_tools_chat, generate_chat_response
 from services.action_executor import execute_action
+from services.workflow_engine import run_workflow
 
 
 @dataclass
@@ -36,6 +38,7 @@ class OrchestratorResult:
     response: str
     actions_taken: list[ActionTaken] = field(default_factory=list)
     error: str | None = None
+    workflow_execution_id: int | None = None
 
 
 async def _load_configured_apps(db: AsyncSession) -> list[App]:
@@ -273,3 +276,154 @@ User info:
             actions_taken=actions_taken,
             error=str(e),
         )
+
+
+async def match_workflow(db: AsyncSession, user: User, message: str) -> Workflow | None:
+    """Check if user message matches any of the user's active workflows."""
+    result = await db.execute(
+        select(Workflow)
+        .where(Workflow.user_id == user.id, Workflow.status == "active")
+        .options(selectinload(Workflow.agents).selectinload(WorkflowAgent.agent))
+    )
+    workflows = result.scalars().all()
+    if not workflows:
+        return None
+
+    # Build workflow descriptions for Gemini
+    wf_list = []
+    for wf in workflows:
+        agents = sorted(wf.agents, key=lambda a: a.step_order)
+        agent_names = " → ".join(a.agent.name for a in agents if a.agent)
+        wf_list.append(
+            f"ID:{wf.id} | {wf.name} | {wf.description or 'No description'} | Steps: {agent_names}"
+        )
+
+    prompt = (
+        "You are a workflow matcher. Given the user's request and available workflows, "
+        "determine if any workflow matches.\n\n"
+        f"Available workflows:\n{chr(10).join(wf_list)}\n\n"
+        f'User request: "{message}"\n\n'
+        "If a workflow matches, respond with ONLY the workflow ID number.\n"
+        'If no workflow matches, respond with ONLY "none".'
+    )
+
+    response_text = await generate_chat_response("You are a workflow matcher.", prompt)
+    response_text = response_text.strip().lower()
+
+    if response_text == "none":
+        return None
+
+    # Extract ID
+    try:
+        wf_id = int(response_text.replace("id:", "").strip())
+        return next((wf for wf in workflows if wf.id == wf_id), None)
+    except (ValueError, StopIteration):
+        return None
+
+
+async def execute_workflow_from_chat(
+    db: AsyncSession, user: User, workflow: Workflow, message: str
+) -> OrchestratorResult:
+    """Trigger a workflow from chat, run synchronously, return results."""
+    # Create execution record
+    execution = WorkflowExecution(
+        workflow_id=workflow.id,
+        user_id=user.id,
+        status="pending",
+        trigger_input=message,
+        variables={},
+    )
+    db.add(execution)
+    await db.commit()
+    await db.refresh(execution)
+
+    # Run the workflow (synchronous — awaited)
+    await run_workflow(execution.id)
+
+    # Reload execution with step results (include agent names)
+    await db.refresh(execution)
+    step_result = await db.execute(
+        select(StepExecution)
+        .where(StepExecution.workflow_execution_id == execution.id)
+        .options(selectinload(StepExecution.workflow_agent).selectinload(WorkflowAgent.agent))
+        .order_by(StepExecution.step_order)
+    )
+    steps = step_result.scalars().all()
+
+    # Collect raw step data for Gemini summarization
+    actions_taken = []
+    step_summaries = []
+
+    for step in steps:
+        agent_name = ""
+        if step.workflow_agent and step.workflow_agent.agent:
+            agent_name = step.workflow_agent.agent.name
+
+        step_info = {
+            "step": step.step_order,
+            "agent": agent_name,
+            "status": step.status,
+            "actions": [],
+            "error": step.error_message,
+        }
+
+        if step.actions_invoked:
+            for action in step.actions_invoked:
+                step_info["actions"].append({
+                    "app": action.get("app", ""),
+                    "action": action.get("action", ""),
+                    "output": action.get("output"),
+                })
+                actions_taken.append(ActionTaken(
+                    app=action.get("app", ""),
+                    action=action.get("action", ""),
+                    input=action.get("input", {}),
+                    output=action.get("output"),
+                    success=step.status == "completed",
+                    error=step.error_message,
+                ))
+
+        # Include result data (e.g. ticket numbers, instance IDs)
+        if step.result and isinstance(step.result, dict):
+            step_info["result"] = step.result
+
+        step_summaries.append(step_info)
+
+    # Use Gemini to generate a friendly, detailed summary
+    import json as _json
+    summary_prompt = (
+        f'You are ORKY, an AI assistant. A workflow just finished running. '
+        f'Summarize the results for the user in a clear, friendly way.\n\n'
+        f'Workflow: {workflow.name}\n'
+        f'Description: {workflow.description or "N/A"}\n'
+        f'Overall status: {execution.status}\n'
+        f'User request: "{message}"\n\n'
+        f'Step results:\n{_json.dumps(step_summaries, indent=2, default=str)}\n\n'
+        f'Guidelines:\n'
+        f'- Show each step with the agent name and what it did\n'
+        f'- Highlight key outputs: ticket numbers, instance IDs, resource details\n'
+        f'- If a step failed, explain the error clearly\n'
+        f'- Use markdown formatting (bold for labels, bullet points for details)\n'
+        f'- Be concise but include all important details\n'
+        f'- Do NOT show raw JSON or technical internals'
+    )
+
+    try:
+        response_text = await generate_chat_response(
+            "You are ORKY, a friendly AI assistant that summarizes workflow execution results.",
+            summary_prompt,
+        )
+    except Exception:
+        # Fallback to basic formatting if Gemini fails
+        lines = [f"**Workflow: {workflow.name}** — {execution.status}\n"]
+        for s in step_summaries:
+            lines.append(f"**Step {s['step']}** ({s['agent']}) — {s['status']}")
+            if s.get("error"):
+                lines.append(f"  - Error: {s['error']}")
+        response_text = "\n".join(lines)
+
+    return OrchestratorResult(
+        response=response_text,
+        actions_taken=actions_taken,
+        workflow_execution_id=execution.id,
+    )

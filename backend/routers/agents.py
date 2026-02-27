@@ -14,6 +14,24 @@ from schemas.agent import AgentCreate, AgentUpdate
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
 
+async def _resolve_action_keys(db: AsyncSession, action_keys: list[str]) -> list[int]:
+    """Resolve 'appSlug:actionName' strings to DB action IDs."""
+    action_ids = []
+    for key in action_keys:
+        if ":" not in key:
+            continue
+        app_slug, action_name = key.split(":", 1)
+        result = await db.execute(
+            select(AppAction.id)
+            .join(App, AppAction.app_id == App.id)
+            .where(App.slug == app_slug, AppAction.name == action_name)
+        )
+        action_id = result.scalar_one_or_none()
+        if action_id:
+            action_ids.append(action_id)
+    return action_ids
+
+
 @router.get("")
 async def list_agents(
     user: User = Depends(get_current_user),
@@ -33,47 +51,15 @@ async def list_agents(
 
     response = []
     for agent in agents:
-        # Count workflow usages
         count_result = await db.execute(
             select(sa_func.count()).select_from(WorkflowAgent).where(WorkflowAgent.agent_id == agent.id)
         )
         workflow_count = count_result.scalar() or 0
 
-        agent_dict = {
-            "id": agent.id,
-            "userId": agent.user_id,
-            "name": agent.name,
-            "description": agent.description,
-            "role": agent.role,
-            "steps": agent.steps,
-            "model": agent.model,
-            "icon": agent.icon,
-            "color": agent.color,
-            "status": agent.status,
-            "createdAt": agent.created_at.isoformat() if agent.created_at else None,
-            "updatedAt": agent.updated_at.isoformat() if agent.updated_at else None,
-            "actions": [
-                {
-                    "action": {
-                        "id": aa.action.id,
-                        "name": aa.action.name,
-                        "displayName": aa.action.display_name,
-                        "description": aa.action.description,
-                        "actionType": aa.action.action_type,
-                        "inputSchema": aa.action.input_schema,
-                        "app": {
-                            "name": aa.action.app.name,
-                            "slug": aa.action.app.slug,
-                            "icon": aa.action.app.icon,
-                        } if aa.action.app else None,
-                    }
-                }
-                for aa in agent.actions
-            ],
-            "_count": {
-                "actions": len(agent.actions),
-                "workflowAgents": workflow_count,
-            },
+        agent_dict = _agent_to_dict(agent)
+        agent_dict["_count"] = {
+            "actions": len(agent.actions),
+            "workflowAgents": workflow_count,
         }
         response.append(agent_dict)
 
@@ -100,13 +86,13 @@ async def create_agent(
     db.add(agent)
     await db.flush()
 
-    if body.actionIds:
-        for action_id in body.actionIds:
+    if body.actionKeys:
+        action_ids = await _resolve_action_keys(db, body.actionKeys)
+        for action_id in action_ids:
             db.add(AgentAction(agent_id=agent.id, action_id=action_id))
 
     await db.commit()
 
-    # Reload with relations
     result = await db.execute(
         select(Agent)
         .where(Agent.id == agent.id)
@@ -164,18 +150,18 @@ async def update_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    update_data = body.model_dump(exclude_unset=True, exclude={"actionIds"})
+    update_data = body.model_dump(exclude_unset=True, exclude={"actionKeys"})
     for key, value in update_data.items():
         setattr(agent, key, value)
 
-    if body.actionIds is not None:
+    if body.actionKeys is not None:
         await db.execute(delete(AgentAction).where(AgentAction.agent_id == agent.id))
-        for action_id in body.actionIds:
+        action_ids = await _resolve_action_keys(db, body.actionKeys)
+        for action_id in action_ids:
             db.add(AgentAction(agent_id=agent.id, action_id=action_id))
 
     await db.commit()
 
-    # Reload
     result = await db.execute(
         select(Agent)
         .where(Agent.id == agent.id)

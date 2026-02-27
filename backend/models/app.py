@@ -14,7 +14,7 @@ class App(Base):
     logo_url = Column(String, nullable=True)
     category = Column(String, nullable=True)
     credentials = Column(JSON, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=func.now())
 
     actions = relationship("AppAction", back_populates="app", cascade="all, delete-orphan")
 

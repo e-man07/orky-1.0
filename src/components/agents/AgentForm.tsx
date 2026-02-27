@@ -16,6 +16,7 @@ import {
 import { ActionPicker } from './ActionPicker'
 import { motion } from 'motion/react'
 import { apiFetch } from '@/lib/api'
+import { actionKey } from '@/data/apps'
 
 interface AgentFormProps {
   agent: any | null
@@ -29,8 +30,9 @@ export function AgentForm({ agent, onSaved }: AgentFormProps) {
   const [steps, setSteps] = useState('')
   const [model, setModel] = useState('gemini-2.0-flash')
   const [status, setStatus] = useState('active')
-  const [actionIds, setActionIds] = useState<number[]>([])
+  const [actionKeys, setActionKeys] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (agent) {
@@ -40,7 +42,17 @@ export function AgentForm({ agent, onSaved }: AgentFormProps) {
       setSteps(agent.steps || '')
       setModel(agent.model || 'gemini-2.0-flash')
       setStatus(agent.status || 'active')
-      setActionIds(agent.actions?.map((a: any) => a.actionId) || [])
+      // Convert backend action objects to string keys
+      const keys = (agent.actions || [])
+        .map((a: any) => {
+          const act = a.action
+          if (act?.app?.slug && act?.name) {
+            return actionKey(act.app.slug, act.name)
+          }
+          return null
+        })
+        .filter(Boolean) as string[]
+      setActionKeys(keys)
     } else {
       setName('')
       setDescription('')
@@ -48,16 +60,17 @@ export function AgentForm({ agent, onSaved }: AgentFormProps) {
       setSteps('')
       setModel('gemini-2.0-flash')
       setStatus('active')
-      setActionIds([])
+      setActionKeys([])
     }
   }, [agent])
 
   async function handleSave() {
     if (!name.trim()) return
     setSaving(true)
+    setError('')
 
     try {
-      const body = { name, description, role, steps, model, status, actionIds }
+      const body = { name, description, role, steps, model, status, actionKeys }
       const url = agent ? `/api/agents/${agent.id}` : '/api/agents'
       const method = agent ? 'PATCH' : 'POST'
 
@@ -66,7 +79,14 @@ export function AgentForm({ agent, onSaved }: AgentFormProps) {
         body: JSON.stringify(body),
       })
 
-      if (res.ok) onSaved()
+      if (res.ok) {
+        onSaved()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setError(data.detail || data.error || `Failed to save (${res.status})`)
+      }
+    } catch (e: any) {
+      setError(e.message || 'Network error')
     } finally {
       setSaving(false)
     }
@@ -92,16 +112,21 @@ export function AgentForm({ agent, onSaved }: AgentFormProps) {
             {agent ? 'Edit Agent' : 'New Agent'}
           </h2>
         </div>
-        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          <Button
-            onClick={handleSave}
-            disabled={saving || !name.trim()}
-            className="bg-logo-blue hover:bg-logo-blue/80 text-black font-medium h-8 text-xs cursor-pointer"
-          >
-            <Save className="h-3.5 w-3.5 mr-1.5" />
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </motion.div>
+        <div className="flex items-center gap-3">
+          {error && (
+            <span className="text-xs text-red-400">{error}</span>
+          )}
+          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            <Button
+              onClick={handleSave}
+              disabled={saving || !name.trim()}
+              className="bg-logo-blue hover:bg-logo-blue/80 text-black font-medium h-8 text-xs cursor-pointer"
+            >
+              <Save className="h-3.5 w-3.5 mr-1.5" />
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          </motion.div>
+        </div>
       </motion.div>
 
       {/* Name */}
@@ -213,10 +238,10 @@ export function AgentForm({ agent, onSaved }: AgentFormProps) {
         className="space-y-1.5"
       >
         <Label className="text-xs text-white/60">
-          App Actions ({actionIds.length} selected)
+          App Actions ({actionKeys.length} selected)
         </Label>
         <div className="max-h-96 overflow-auto rounded-lg border border-white/[0.06] p-2">
-          <ActionPicker selectedActionIds={actionIds} onChange={setActionIds} />
+          <ActionPicker selectedKeys={actionKeys} onChange={setActionKeys} />
         </div>
       </motion.div>
     </motion.div>

@@ -1,6 +1,11 @@
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
 from database import Base
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 class User(Base):
@@ -18,8 +23,8 @@ class User(Base):
     gender = Column(String, nullable=True)
     company = Column(String, nullable=True)
     title = Column(String, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
     executions = relationship("Execution", back_populates="user")

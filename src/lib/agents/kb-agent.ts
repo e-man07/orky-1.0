@@ -1,7 +1,7 @@
 import { BaseAgent } from './base'
 import { resolveUserAccessById } from '../access-control'
-import { vectorSearch, vectorSearchUnfiltered } from '../rag/search'
-import { generateChatResponse, checkQueryAccess } from '../gemini'
+import { vectorSearch } from '../rag/search'
+import { generateChatResponse } from '../gemini'
 import { prisma } from '../prisma'
 import type { AgentResult, SearchResult, SourceCitation } from '@/types'
 
@@ -10,7 +10,7 @@ function buildSystemPrompt(title: string | null): string {
 
   return `You are ORKY, an AI-powered knowledge assistant for enterprise employees. Your role is to answer questions based on the knowledge base articles provided as context.
 
-The current user's designation is **${designationLabel}**. When the context contains information for multiple designation bands (e.g., Band A - Senior Leadership, Band B - Mid Management, Band C - Individual Contributors), ONLY share the information that is relevant to this specific user's designation band. Do NOT share information meant for other designation bands.
+The current user's designation is **${designationLabel}**.
 
 Designation bands for reference:
 - Band A (Senior Leadership): Director, Senior Director, Vice President, CXO
@@ -20,11 +20,11 @@ Designation bands for reference:
 Rules:
 1. ONLY answer based on the provided context. If the context doesn't contain relevant information, say "I don't have information about that in the knowledge base."
 2. Be concise and helpful. Format your response with markdown where appropriate.
-3. If multiple articles are relevant, synthesize the information.
-4. Always maintain a professional, helpful tone.
-5. Do NOT make up information not present in the context.
-6. If the user's question is ambiguous, provide the most relevant answer from the context.
-7. IMPORTANT: Filter your response to only include information applicable to the user's designation (${designationLabel}). Do not mention policies or limits for other designation bands.`
+3. Always maintain a professional, helpful tone.
+4. Do NOT make up information not present in the context.
+5. When the user asks about their own benefits/limits, respond with the information for their designation band (${designationLabel}).
+6. IMPORTANT: If the user asks about a DIFFERENT designation band's benefits or limits (e.g., they are an Analyst asking about Director limits), respond ONLY with: "You don't have access to that designation band's information. Based on your designation (${designationLabel}), here is what applies to you:" followed by the user's own band information from the context.
+7. If the user asks a general question like "what is the policy?", share only the info for their band.`
 }
 
 function buildContext(results: SearchResult[]): string {
@@ -89,29 +89,15 @@ export class KnowledgeBaseAgent extends BaseAgent {
         criteria: access.criteria.map((c) => c.name),
       })
 
-      // Step 1.5: Pre-search access check
+      // Get user's title for LLM filtering
       const user = await prisma.user.findUnique({
         where: { id: userId },
       })
       const userTitle = user?.title || 'employee'
 
-      await this.logAction('Checking query access permissions')
-      const accessCheck = await checkQueryAccess(query, userTitle)
-      if (!accessCheck.allowed) {
-        await this.logAction('Access denied', { reason: accessCheck.reason })
-        await this.updateStatus('success')
-        return {
-          response: accessCheck.reason || "You don't have access to that information.",
-          sources: [],
-          status: 'success',
-        }
-      }
-      await this.logAction('Access check passed')
-
       // Step 2: Vector search (with access control)
       await this.logAction('Searching knowledge base')
       const searchResults = await vectorSearch(query, access.criteriaIds)
-      const embeddingStr = (searchResults as any)._embeddingStr
 
       await this.logAction('Search complete', {
         resultsFound: searchResults.length,
@@ -119,40 +105,6 @@ export class KnowledgeBaseAgent extends BaseAgent {
           .slice(0, 3)
           .map((r) => `${r.articleNumber}: ${r.shortDescription}`),
       })
-
-      // Step 2.5: Check if restricted articles exist that the user can't access
-      if (embeddingStr) {
-        const unfilteredResults = await vectorSearchUnfiltered(embeddingStr, 0.5, 5)
-        const filteredArticles = new Set(searchResults.map((r) => r.articleNumber))
-        const restrictedMatches = unfilteredResults.filter(
-          (r) => !filteredArticles.has(r.articleNumber)
-        )
-
-        console.log('[KB_AGENT] Filtered top:', searchResults.slice(0, 3).map((r) => `${r.articleNumber}=${r.similarity.toFixed(3)}`))
-        console.log('[KB_AGENT] Unfiltered top:', unfilteredResults.slice(0, 3).map((r) => `${r.articleNumber}=${r.similarity.toFixed(3)}`))
-        console.log('[KB_AGENT] Restricted matches:', restrictedMatches.map((r) => `${r.articleNumber}=${r.similarity.toFixed(3)}`))
-
-        if (restrictedMatches.length > 0) {
-          const topRestricted = restrictedMatches[0]
-          const topFiltered = searchResults.length > 0 ? searchResults[0].similarity : 0
-
-          // If the best restricted result is more relevant than the best filtered result,
-          // the user is asking about something they can't access
-          if (topRestricted.similarity > topFiltered + 0.05) {
-            await this.logAction('Access restricted', {
-              restrictedArticle: `${topRestricted.articleNumber}: ${topRestricted.shortDescription}`,
-              restrictedSimilarity: topRestricted.similarity,
-              topFilteredSimilarity: topFiltered,
-            })
-            await this.updateStatus('success')
-            return {
-              response: `You don't have access to the information you're looking for. The relevant knowledge base article "${topRestricted.shortDescription}" is restricted based on your current designation (${userTitle}).`,
-              sources: [],
-              status: 'success',
-            }
-          }
-        }
-      }
 
       if (searchResults.length === 0) {
         await this.updateStatus('success')

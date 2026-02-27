@@ -52,18 +52,21 @@ export default function AppsPage() {
         logoUrl: def.logoUrl,
         category: def.category,
         isConfigured: backend?.isConfigured ?? false,
-        comingSoon: !CONFIGURABLE_SLUGS.has(def.slug),
+        comingSoon: !def.pro && !CONFIGURABLE_SLUGS.has(def.slug),
+        pro: def.pro ?? false,
         _count: { actions: def.actions.length },
       }
     })
   }, [backendApps])
 
-  const filtered = apps.filter(
-    (a) =>
-      a.name.toLowerCase().includes(search.toLowerCase()) ||
-      a.description?.toLowerCase().includes(search.toLowerCase()) ||
-      a.category?.toLowerCase().includes(search.toLowerCase()),
-  )
+  const filtered = apps
+    .filter(
+      (a) =>
+        a.name.toLowerCase().includes(search.toLowerCase()) ||
+        a.description?.toLowerCase().includes(search.toLowerCase()) ||
+        a.category?.toLowerCase().includes(search.toLowerCase()),
+    )
+    .sort((a, b) => Number(a.pro) - Number(b.pro))
 
   // Compute stats
   const totalApps = APP_CATALOG.length

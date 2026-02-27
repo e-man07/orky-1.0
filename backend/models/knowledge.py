@@ -1,7 +1,12 @@
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, ForeignKey, func
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from database import Base
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 class KnowledgeArticle(Base):
@@ -15,8 +20,8 @@ class KnowledgeArticle(Base):
     workflow = Column(String, nullable=True)
     source = Column(String, default="excel")
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     criteria = relationship("ArticleCriteria", back_populates="article", cascade="all, delete-orphan")
     chunks = relationship("ArticleChunk", back_populates="article", cascade="all, delete-orphan")
@@ -33,7 +38,7 @@ class ArticleChunk(Base):
     preceding_context = Column(Text, nullable=True)
     following_context = Column(Text, nullable=True)
     embedding = Column(Vector(768), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     article = relationship("KnowledgeArticle", back_populates="chunks")
 
@@ -54,8 +59,8 @@ class ChatSession(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     title = Column(String, default="New Chat")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     user = relationship("User", back_populates="chat_sessions")
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
@@ -69,7 +74,7 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     sources = Column(JSON, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     session = relationship("ChatSession", back_populates="messages")
 
@@ -86,8 +91,8 @@ class Execution(Base):
     conversational_response = Column(Text, nullable=True)
     sources = Column(JSON, nullable=True)
     error_message = Column(String, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     user = relationship("User", back_populates="executions")
     logs = relationship("AgentLog", back_populates="execution", cascade="all, delete-orphan")
@@ -101,7 +106,7 @@ class AgentLog(Base):
     agent_type = Column(String, nullable=False)
     action = Column(String, nullable=False)
     details = Column(JSON, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     execution = relationship("Execution", back_populates="logs")
 
@@ -114,5 +119,5 @@ class SyncJob(Base):
     status = Column(String, default="pending")
     items_synced = Column(Integer, default=0)
     error_message = Column(String, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
     completed_at = Column(DateTime(timezone=True), nullable=True)

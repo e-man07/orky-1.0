@@ -1,6 +1,11 @@
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
 from database import Base
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 class Agent(Base):
@@ -16,8 +21,8 @@ class Agent(Base):
     icon = Column(String, nullable=True)
     color = Column(String, default="#3B82F6")
     status = Column(String, default="active")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     user = relationship("User", back_populates="agents")
     actions = relationship("AgentAction", back_populates="agent", cascade="all, delete-orphan")

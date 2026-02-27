@@ -35,7 +35,7 @@ export function AppConfigModal({ app, open, onClose, onSaved }: AppConfigModalPr
     setError('')
 
     try {
-      const res = await apiFetch(`/api/apps/${app.id}/credentials`, {
+      const res = await apiFetch(`/api/apps/slug/${app.slug}/credentials`, {
         method: 'POST',
         body: JSON.stringify(values),
       })

@@ -1,6 +1,11 @@
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, ARRAY, func
 from sqlalchemy.orm import relationship
 from database import Base
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 class Workflow(Base):
@@ -13,8 +18,8 @@ class Workflow(Base):
     steps = Column(Text, nullable=True)
     trigger_roles = Column(ARRAY(String), default=[])
     status = Column(String, default="draft")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     user = relationship("User", back_populates="workflows")
     agents = relationship("WorkflowAgent", back_populates="workflow", cascade="all, delete-orphan")
@@ -46,7 +51,7 @@ class WorkflowExecution(Base):
     variables = Column(JSON, nullable=True)
     trigger_input = Column(Text, nullable=True)
     error_message = Column(String, nullable=True)
-    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), default=_utcnow)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
     workflow = relationship("Workflow", back_populates="executions")
