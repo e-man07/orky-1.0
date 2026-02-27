@@ -1,0 +1,58 @@
+import json
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from services.gemini import generate_embedding
+
+DEFAULT_SIMILARITY_THRESHOLD = 0.5
+DEFAULT_TOP_K = 5
+
+
+async def vector_search(
+    db: AsyncSession,
+    query: str,
+    criteria_ids: list[int],
+    similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+    top_k: int = DEFAULT_TOP_K,
+) -> list[dict]:
+    """Vector search with access control filtering."""
+    query_embedding = await generate_embedding(query, "RETRIEVAL_QUERY")
+    embedding_str = json.dumps(query_embedding)
+
+    result = await db.execute(
+        text("""
+            SELECT
+                ac.id as "chunkId",
+                ac.content,
+                ac.preceding_context as "precedingContext",
+                ac.following_context as "followingContext",
+                ka.number as "articleNumber",
+                ka.short_description as "shortDescription",
+                ka.category,
+                1 - (ac.embedding <=> :embedding::vector) AS similarity
+            FROM article_chunks ac
+            JOIN knowledge_articles ka ON ac.article_id = ka.id
+            WHERE ka.is_active = true
+                AND ac.embedding IS NOT NULL
+                AND (
+                    NOT EXISTS (
+                        SELECT 1 FROM article_criteria acr WHERE acr.article_id = ka.id
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM article_criteria acr
+                        WHERE acr.article_id = ka.id AND acr.criteria_id = ANY(:criteria_ids)
+                    )
+                )
+                AND 1 - (ac.embedding <=> :embedding::vector) >= :threshold
+            ORDER BY similarity DESC
+            LIMIT :top_k
+        """),
+        {
+            "embedding": embedding_str,
+            "criteria_ids": criteria_ids,
+            "threshold": similarity_threshold,
+            "top_k": top_k,
+        },
+    )
+
+    rows = result.mappings().all()
+    return [dict(row) for row in rows]

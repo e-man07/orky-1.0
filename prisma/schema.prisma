@@ -1,0 +1,296 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+model User {
+  id         Int      @id @default(autoincrement())
+  sysId      String?  @unique @map("sys_id")
+  orkyId     String?  @unique @map("orky_id")
+  userId     String?  @map("user_id")
+  name       String
+  email      String   @unique
+  active     Boolean  @default(true)
+  department String?
+  location   String?
+  gender     String?
+  company    String?
+  title      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  roles        UserRole[]
+  executions   Execution[]
+  chatSessions ChatSession[]
+  agents              Agent[]
+  workflows           Workflow[]
+  workflowExecutions  WorkflowExecution[]
+
+  @@map("users")
+}
+
+model UserRole {
+  id       Int    @id @default(autoincrement())
+  userId   Int    @map("user_id")
+  roleName String @map("role_name")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleName])
+  @@map("user_roles")
+}
+
+model UserCriteria {
+  id         Int    @id @default(autoincrement())
+  name       String @unique
+  matchType  String @map("match_type") // "designation"
+  matchValue String @map("match_value")
+
+  articles ArticleCriteria[]
+
+  @@map("user_criteria")
+}
+
+model KnowledgeArticle {
+  id               Int     @id @default(autoincrement())
+  number           String  @unique // e.g. "KB0010012"
+  shortDescription String  @map("short_description")
+  articleBody      String  @map("article_body") @db.Text
+  category         String?
+  workflow         String?
+  source           String  @default("excel") // "servicenow" | "sharepoint" | "excel"
+  isActive         Boolean @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  criteria ArticleCriteria[]
+  chunks   ArticleChunk[]
+
+  @@map("knowledge_articles")
+}
+
+model ArticleCriteria {
+  articleId  Int @map("article_id")
+  criteriaId Int @map("criteria_id")
+
+  article  KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  criteria UserCriteria     @relation(fields: [criteriaId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, criteriaId])
+  @@map("article_criteria")
+}
+
+model ArticleChunk {
+  id               Int     @id @default(autoincrement())
+  articleId        Int     @map("article_id")
+  content          String  @db.Text
+  chunkIndex       Int     @map("chunk_index")
+  chunkSize        Int     @map("chunk_size")
+  precedingContext String? @map("preceding_context") @db.Text
+  followingContext String? @map("following_context") @db.Text
+  // embedding column added via raw SQL migration (vector(768))
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  article KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@map("article_chunks")
+}
+
+model Execution {
+  id                     Int      @id @default(autoincrement())
+  userId                 Int      @map("user_id")
+  conversationId         String?  @map("conversation_id")
+  userPrompt             String   @map("user_prompt")
+  status                 String   @default("pending")
+  agentType              String?  @map("agent_type")
+  conversationalResponse String?  @map("conversational_response") @db.Text
+  sources                Json?
+  errorMessage           String?  @map("error_message")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  user User       @relation(fields: [userId], references: [id])
+  logs AgentLog[]
+
+  @@map("executions")
+}
+
+model AgentLog {
+  id          Int      @id @default(autoincrement())
+  executionId Int      @map("execution_id")
+  agentType   String   @map("agent_type")
+  action      String
+  details     Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  execution Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@map("agent_logs")
+}
+
+model ChatSession {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String   @default("New Chat")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User          @relation(fields: [userId], references: [id])
+  messages ChatMessage[]
+
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  sessionId Int      @map("session_id")
+  role      String   // "user" | "assistant"
+  content   String   @db.Text
+  sources   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
+
+model SyncJob {
+  id          Int      @id @default(autoincrement())
+  source      String   // "servicenow" | "sharepoint" | "excel"
+  status      String   @default("pending") // "pending" | "running" | "completed" | "failed"
+  itemsSynced Int      @default(0) @map("items_synced")
+  errorMessage String? @map("error_message")
+  createdAt   DateTime @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@map("sync_jobs")
+}
+
+// =============================================
+// Part 2: Agentic Workflow System
+// =============================================
+
+model App {
+  id          Int         @id @default(autoincrement())
+  name        String
+  slug        String      @unique
+  description String?
+  icon        String?
+  logoUrl     String?     @map("logo_url")
+  category    String?
+  credentials Json?
+  createdAt   DateTime    @default(now()) @map("created_at")
+  actions     AppAction[]
+  @@map("apps")
+}
+
+model AppAction {
+  id          Int      @id @default(autoincrement())
+  appId       Int      @map("app_id")
+  name        String
+  displayName String   @map("display_name")
+  description String?
+  actionType  String   @map("action_type") // "mcp_tool" | "rest_api"
+  inputSchema Json?    @map("input_schema")
+  isEnabled   Boolean  @default(true) @map("is_enabled")
+  app         App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  agents      AgentAction[]
+  @@unique([appId, name])
+  @@map("app_actions")
+}
+
+model Agent {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  name         String
+  description  String?  @db.Text
+  role         String?  @db.Text
+  steps        String?  @db.Text
+  model        String   @default("gemini-2.0-flash")
+  icon         String?
+  color        String?  @default("#3B82F6")
+  status       String   @default("active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id])
+  actions      AgentAction[]
+  workflowAgents WorkflowAgent[]
+  @@map("agents")
+}
+
+model AgentAction {
+  agentId  Int @map("agent_id")
+  actionId Int @map("action_id")
+  agent    Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  action   AppAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  @@id([agentId, actionId])
+  @@map("agent_actions")
+}
+
+model Workflow {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  name        String
+  description String?  @db.Text
+  steps       String?  @db.Text
+  triggerRoles String[] @map("trigger_roles")
+  status      String   @default("draft")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id])
+  agents      WorkflowAgent[]
+  executions  WorkflowExecution[]
+  @@map("workflows")
+}
+
+model WorkflowAgent {
+  id         Int  @id @default(autoincrement())
+  workflowId Int  @map("workflow_id")
+  agentId    Int  @map("agent_id")
+  stepOrder  Int  @map("step_order")
+  taskPrompt String? @map("task_prompt") @db.Text
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  agent      Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  stepExecutions StepExecution[]
+  @@map("workflow_agents")
+}
+
+model WorkflowExecution {
+  id           Int       @id @default(autoincrement())
+  workflowId   Int       @map("workflow_id")
+  userId       Int       @map("user_id")
+  status       String    @default("pending")
+  currentStep  Int?      @map("current_step")
+  variables    Json?
+  triggerInput String?   @map("trigger_input") @db.Text
+  errorMessage String?   @map("error_message")
+  startedAt    DateTime  @default(now()) @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  workflow     Workflow   @relation(fields: [workflowId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
+  steps        StepExecution[]
+  @@map("workflow_executions")
+}
+
+model StepExecution {
+  id                  Int       @id @default(autoincrement())
+  workflowExecutionId Int       @map("workflow_execution_id")
+  workflowAgentId     Int       @map("workflow_agent_id")
+  stepOrder           Int       @map("step_order")
+  status              String    @default("pending")
+  agentThinking       String?   @map("agent_thinking") @db.Text
+  actionsInvoked      Json?     @map("actions_invoked")
+  result              Json?
+  errorMessage        String?   @map("error_message")
+  startedAt           DateTime? @map("started_at")
+  completedAt         DateTime? @map("completed_at")
+  workflowExecution WorkflowExecution @relation(fields: [workflowExecutionId], references: [id], onDelete: Cascade)
+  workflowAgent     WorkflowAgent     @relation(fields: [workflowAgentId], references: [id])
+  @@map("step_executions")
+}
