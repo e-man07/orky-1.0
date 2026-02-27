@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Package, Search } from 'lucide-react'
@@ -12,11 +12,12 @@ import { AppActionsDrawer } from '@/components/apps/AppActionsDrawer'
 import { motion } from 'motion/react'
 import { staggerContainer, staggerItem, pageVariants } from '@/lib/animations'
 import { apiFetch } from '@/lib/api'
+import { APP_CATALOG, TOTAL_ACTIONS, CONFIGURABLE_SLUGS } from '@/data/apps'
 
 export default function AppsPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [apps, setApps] = useState<any[]>([])
+  const [backendApps, setBackendApps] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [configApp, setConfigApp] = useState<any>(null)
   const [drawerApp, setDrawerApp] = useState<{ id: number; name: string } | null>(null)
@@ -27,9 +28,35 @@ export default function AppsPage() {
   }, [status])
 
   async function fetchApps() {
-    const res = await apiFetch('/api/apps')
-    if (res.ok) setApps(await res.json())
+    try {
+      const res = await apiFetch('/api/apps')
+      if (res.ok) setBackendApps(await res.json())
+    } catch {
+      // Backend down — still show all apps as unconfigured
+    }
   }
+
+  // Merge static catalog with dynamic config status from backend
+  const apps = useMemo(() => {
+    const backendBySlug = Object.fromEntries(
+      backendApps.map((a: any) => [a.slug, a]),
+    )
+    return APP_CATALOG.map((def) => {
+      const backend = backendBySlug[def.slug]
+      return {
+        id: backend?.id ?? 0,
+        name: def.name,
+        slug: def.slug,
+        description: def.description,
+        icon: def.icon,
+        logoUrl: def.logoUrl,
+        category: def.category,
+        isConfigured: backend?.isConfigured ?? false,
+        comingSoon: !CONFIGURABLE_SLUGS.has(def.slug),
+        _count: { actions: def.actions.length },
+      }
+    })
+  }, [backendApps])
 
   const filtered = apps.filter(
     (a) =>
@@ -39,9 +66,9 @@ export default function AppsPage() {
   )
 
   // Compute stats
-  const totalApps = apps.length
+  const totalApps = APP_CATALOG.length
   const configuredApps = apps.filter((a) => a.isConfigured).length
-  const totalActions = apps.reduce((sum, a) => sum + (a._count?.actions || 0), 0)
+  const totalActions = TOTAL_ACTIONS
   const inUseActions = apps.filter((a) => a.isConfigured).reduce((sum, a) => sum + (a._count?.actions || 0), 0)
 
   const user = session?.user as any
@@ -129,7 +156,7 @@ export default function AppsPage() {
             animate="visible"
           >
             {filtered.map((app) => (
-              <motion.div key={app.id} variants={staggerItem}>
+              <motion.div key={app.slug} variants={staggerItem}>
                 <AppCard
                   app={app}
                   onConfigure={() => setConfigApp(app)}

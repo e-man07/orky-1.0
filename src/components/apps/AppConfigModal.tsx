@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { apiFetch } from '@/lib/api'
+import { APP_BY_SLUG } from '@/data/apps'
 import {
   Dialog,
   DialogContent,
@@ -13,54 +14,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { motion } from 'motion/react'
-
-interface CredentialField {
-  key: string
-  label: string
-  type?: string
-  placeholder?: string
-}
-
-const credentialFields: Record<string, CredentialField[]> = {
-  servicenow: [
-    { key: 'instance_url', label: 'Instance URL', placeholder: 'https://dev12345.service-now.com' },
-    { key: 'username', label: 'Username', placeholder: 'admin' },
-    { key: 'password', label: 'Password', type: 'password' },
-  ],
-  jira: [
-    { key: 'base_url', label: 'Base URL', placeholder: 'https://your-domain.atlassian.net' },
-    { key: 'email', label: 'Email', placeholder: 'user@company.com' },
-    { key: 'api_token', label: 'API Token', type: 'password' },
-  ],
-  slack: [
-    { key: 'bot_token', label: 'Bot Token', placeholder: 'xoxb-...', type: 'password' },
-    { key: 'default_channel', label: 'Default Channel', placeholder: '#general or C1234567890' },
-  ],
-  aws_ec2: [
-    { key: 'access_key_id', label: 'Access Key ID', placeholder: 'AKIAIOSFODNN7EXAMPLE' },
-    { key: 'secret_access_key', label: 'Secret Access Key', type: 'password' },
-    { key: 'region', label: 'Region', placeholder: 'us-east-1' },
-  ],
-  aws_s3: [
-    { key: 'access_key_id', label: 'Access Key ID', placeholder: 'AKIAIOSFODNN7EXAMPLE' },
-    { key: 'secret_access_key', label: 'Secret Access Key', type: 'password' },
-    { key: 'region', label: 'Region', placeholder: 'us-east-1' },
-  ],
-  sharepoint: [
-    { key: 'tenant_id', label: 'Tenant ID', placeholder: 'Azure AD Tenant ID' },
-    { key: 'client_id', label: 'Client ID', placeholder: 'App Registration Client ID' },
-    { key: 'client_secret', label: 'Client Secret', type: 'password' },
-    { key: 'site_url', label: 'Site URL', placeholder: 'contoso.sharepoint.com/sites/team' },
-  ],
-  snowflake: [
-    { key: 'account', label: 'Account', placeholder: 'xy12345.us-east-1' },
-    { key: 'username', label: 'Username' },
-    { key: 'password', label: 'Password', type: 'password' },
-    { key: 'warehouse', label: 'Warehouse', placeholder: 'COMPUTE_WH' },
-    { key: 'database', label: 'Database' },
-    { key: 'schema', label: 'Schema', placeholder: 'PUBLIC' },
-  ],
-}
 
 interface AppConfigModalProps {
   app: { id: number; name: string; slug: string } | null
@@ -74,7 +27,7 @@ export function AppConfigModal({ app, open, onClose, onSaved }: AppConfigModalPr
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const fields = app ? credentialFields[app.slug] || [] : []
+  const fields = app ? APP_BY_SLUG[app.slug]?.credentialFields || [] : []
 
   async function handleSave() {
     if (!app) return

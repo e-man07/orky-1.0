@@ -15,6 +15,7 @@ interface AppCardProps {
     logoUrl: string | null
     category: string | null
     isConfigured: boolean
+    comingSoon?: boolean
     _count?: { actions: number }
   }
   onConfigure: () => void
@@ -55,27 +56,38 @@ export function AppCard({ app, onConfigure, onViewActions }: AppCardProps) {
             <span className="text-[10px] text-white/35 mb-2">{app.category}</span>
           )}
 
-          {/* Status badge — hides on hover, replaced by Configure */}
+          {/* Status badge — hides on hover, replaced by Configure (or Coming Soon) */}
           <div className="mt-auto h-6 flex items-center justify-center">
-            <Badge
-              variant="secondary"
-              className={`text-[9px] px-1.5 py-0 group-hover:hidden ${
-                app.isConfigured
-                  ? 'bg-emerald-500/10 text-emerald-400/80 border-emerald-500/15'
-                  : 'bg-white/[0.03] text-white/25 border-white/[0.06]'
-              }`}
-            >
-              {app.isConfigured ? 'Connected' : 'Not Connected'}
-            </Badge>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onConfigure()
-              }}
-              className="hidden group-hover:inline-flex text-[10px] text-logo-blue/70 hover:text-logo-blue px-2 py-0.5 rounded bg-logo-blue/[0.08] hover:bg-logo-blue/[0.15] transition-colors cursor-pointer"
-            >
-              Configure
-            </button>
+            {app.comingSoon ? (
+              <Badge
+                variant="secondary"
+                className="text-[9px] px-1.5 py-0 bg-amber-500/10 text-amber-400/70 border-amber-500/15"
+              >
+                Coming Soon
+              </Badge>
+            ) : (
+              <>
+                <Badge
+                  variant="secondary"
+                  className={`text-[9px] px-1.5 py-0 group-hover:hidden ${
+                    app.isConfigured
+                      ? 'bg-emerald-500/10 text-emerald-400/80 border-emerald-500/15'
+                      : 'bg-white/[0.03] text-white/25 border-white/[0.06]'
+                  }`}
+                >
+                  {app.isConfigured ? 'Connected' : 'Not Connected'}
+                </Badge>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onConfigure()
+                  }}
+                  className="hidden group-hover:inline-flex text-[10px] text-logo-blue/70 hover:text-logo-blue px-2 py-0.5 rounded bg-logo-blue/[0.08] hover:bg-logo-blue/[0.15] transition-colors cursor-pointer"
+                >
+                  Configure
+                </button>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
