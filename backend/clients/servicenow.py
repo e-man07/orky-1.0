@@ -51,8 +51,8 @@ class ServiceNowClient:
                     raise
         raise last_error
 
-    def _ticket_url(self, sys_id: str) -> str:
-        return f"{self.instance}/incident.do?sys_id={sys_id}"
+    def _ticket_url(self, sys_id: str, table: str = "incident") -> str:
+        return f"{self.instance}/{table}.do?sys_id={sys_id}"
 
     async def create_incident(self, data: dict) -> dict:
         result = await self._request("POST", f"{self.base_url}/incident", json_data=data)
@@ -84,3 +84,24 @@ class ServiceNowClient:
             params["sysparm_query"] = query
         result = await self._request("GET", f"{self.base_url}/incident", params=params)
         return result.get("result", [])
+
+    # ── RITM (Requested Items) ──────────────────────────────
+
+    async def create_ritm(self, data: dict) -> dict:
+        result = await self._request("POST", f"{self.base_url}/sc_req_item", json_data=data)
+        record = result.get("result", {})
+        sys_id = record.get("sys_id")
+        if not sys_id:
+            raise Exception("No sys_id in ServiceNow RITM response")
+        return {
+            "sys_id": sys_id,
+            "number": record.get("number", sys_id),
+            "url": self._ticket_url(sys_id, "sc_req_item"),
+        }
+
+    async def close_ritm(self, sys_id: str, close_notes: str) -> dict:
+        await self._request("PATCH", f"{self.base_url}/sc_req_item/{sys_id}", json_data={
+            "state": "3",
+            "close_notes": close_notes,
+        })
+        return {"closed": True, "sys_id": sys_id}

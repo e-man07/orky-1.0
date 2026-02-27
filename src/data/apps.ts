@@ -90,6 +90,8 @@ export const APP_CATALOG: AppDefinition[] = [
       { name: 'close_incident', displayName: 'Close Incident', description: 'Close a ServiceNow incident with resolution notes', actionType: 'rest_api', inputSchema: { type: 'object', properties: { sys_id: { type: 'string' }, close_notes: { type: 'string' } }, required: ['sys_id', 'close_notes'] } },
       { name: 'get_incident', displayName: 'Get Incident', description: 'Retrieve details of a specific ServiceNow incident', actionType: 'rest_api', inputSchema: { type: 'object', properties: { sys_id: { type: 'string' } }, required: ['sys_id'] } },
       { name: 'search_incidents', displayName: 'Search Incidents', description: 'Search for incidents using a query filter', actionType: 'rest_api', inputSchema: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } } } },
+      { name: 'create_ritm', displayName: 'Create RITM', description: 'Create a new Requested Item (RITM) in ServiceNow', actionType: 'rest_api', inputSchema: { type: 'object', properties: { short_description: { type: 'string' }, description: { type: 'string' }, cat_item: { type: 'string' }, assignment_group: { type: 'string' }, urgency: { type: 'string', enum: ['1', '2', '3'] } }, required: ['short_description'] } },
+      { name: 'close_ritm', displayName: 'Close RITM', description: 'Close a Requested Item (RITM) with resolution notes', actionType: 'rest_api', inputSchema: { type: 'object', properties: { sys_id: { type: 'string' }, close_notes: { type: 'string' } }, required: ['sys_id', 'close_notes'] } },
     ],
   },
   {

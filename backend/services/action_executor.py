@@ -56,6 +56,10 @@ async def execute_action(
                 result = await client.get_incident(params["sys_id"])
             elif action_name == "search_incidents":
                 result = await client.search_incidents(params.get("query"), params.get("limit", 10))
+            elif action_name == "create_ritm":
+                result = await client.create_ritm(params)
+            elif action_name == "close_ritm":
+                result = await client.close_ritm(params["sys_id"], params["close_notes"])
             else:
                 raise ValueError(f"Unknown ServiceNow action: {action_name}")
 
