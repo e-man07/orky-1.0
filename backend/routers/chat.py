@@ -57,23 +57,28 @@ async def _generate_confirmation_message(user: User, workflow: Workflow) -> str:
     if monthly_limit:
         user_context += f"Monthly mobile allowance: ₹{monthly_limit:,}\n"
 
+    # Strip internal terms from the workflow name for user-facing messages
+    friendly_name = (workflow.name or "").replace(" Automation", "").replace(" automation", "")
+
     prompt = (
-        f"You are ORKY, an AI assistant. The user wants to run the workflow: \"{workflow.name}\".\n"
+        f"You are ORKY, an AI assistant. The user wants to submit a request related to: \"{friendly_name}\".\n"
         f"Before starting, generate a short confirmation message (2-3 sentences max).\n\n"
         f"{user_context}\n"
-        f"Workflow: {workflow.name}\n"
+        f"Request type: {friendly_name}\n"
         f"Description: {workflow.description or 'N/A'}\n\n"
         f"Guidelines:\n"
         f"- Greet the user by first name\n"
         f"- If there's band/allowance info, mention it naturally (e.g., 'As a {user.title} (Band {band_label}), your monthly mobile allowance is ₹{monthly_limit:,}.')\n"
         f"- Ask if they'd like to proceed\n"
         f"- Keep it concise and friendly\n"
-        f"- Do NOT use markdown or bullet points, just a short conversational message"
+        f"- Do NOT use markdown or bullet points, just a short conversational message\n"
+        f"- Do NOT mention 'automation', 'workflow', 'agentic', 'agents', or any internal system terms\n"
+        f"- Talk about it as a simple request or process, e.g., 'Would you like to proceed with your mobile reimbursement?'"
     )
 
     try:
         return await generate_chat_response(
-            "You are ORKY, a friendly AI assistant. Write short, clear confirmation messages.",
+            "You are ORKY, a friendly AI assistant. Write short, clear confirmation messages. Never mention automation, workflows, agents, or internal system details.",
             prompt,
         )
     except Exception:
@@ -82,9 +87,9 @@ async def _generate_confirmation_message(user: User, workflow: Workflow) -> str:
             return (
                 f"Hi {(user.name or 'there').split()[0]}! As a {user.title} (Band {band_label}), "
                 f"your monthly mobile allowance is ₹{monthly_limit:,}. "
-                f"Would you like to proceed with the {workflow.name.lower()}?"
+                f"Would you like to proceed with your {friendly_name.lower()}?"
             )
-        return f"I can start the {workflow.name} for you. Would you like to proceed?"
+        return f"I can help you with your {friendly_name.lower()}. Would you like to proceed?"
 
 
 async def _classify_confirmation(message: str) -> bool:
