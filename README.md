@@ -1,3 +1,13 @@
+
+## Team
+
+**Gray Matter Crew**
+
+- Aman Kumar Jha
+- Rahul Jain
+- Charugupta MR
+- Animesh Jain
+
 # ORKY - Agentic AI Platform for the Enterprise
 
 ORKY is an AI-powered enterprise assistant that unifies knowledge across HR, IT, CRM, and compliance systems into one conversational interface. It provides role-aware answers, executes multi-step agentic workflows, and connects 70+ SaaS applications with 500+ available actions — all with zero information leakage.
@@ -523,13 +533,5 @@ Google Workspace, GitHub, GitLab, Datadog, PagerDuty, Splunk, Terraform, Jenkins
 
 ---
 
-## Team
 
-**Gray Matter Crew**
 
-- Aman Kumar Jha
-- Rahul Jain
-- Charugupta MR
-- Animesh Jain
-
-Powered by Google Gemini.
