@@ -285,11 +285,21 @@ async def generate_workflow(
         action_ids = []
         for action_name in agent_plan.actions:
             # Handle both "action_name" and "app_slug.action_name" formats from Gemini
-            clean_name = action_name.split(".")[-1] if "." in action_name else action_name
-            action_result = await db.execute(
-                select(AppAction).where(AppAction.name == clean_name)
-            )
-            action = action_result.scalar_one_or_none()
+            if "." in action_name:
+                app_slug, clean_name = action_name.split(".", 1)
+                action_result = await db.execute(
+                    select(AppAction)
+                    .join(App, App.id == AppAction.app_id)
+                    .where(AppAction.name == clean_name, App.slug == app_slug)
+                )
+            else:
+                clean_name = action_name
+                action_result = await db.execute(
+                    select(AppAction).where(AppAction.name == clean_name)
+                )
+            # Use first() instead of scalar_one_or_none() since action names
+            # can exist across multiple apps (e.g. send_message in Slack & WhatsApp)
+            action = action_result.scalars().first()
             if action:
                 action_ids.append(action.id)
 
