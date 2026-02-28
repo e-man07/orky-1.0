@@ -10,5 +10,6 @@ google-genai
 pgvector
 python-jose[cryptography]
 httpx
+python-multipart
 boto3
 snowflake-connector-python
