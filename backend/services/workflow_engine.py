@@ -85,25 +85,85 @@ async def _send_completion_email(
         if not user or not user.email:
             return
 
-        # Build step summary lines
-        step_lines = []
-        for s in steps_summary:
-            step_lines.append(f"  Step {s['step_order']}: {s['agent_name']} — Completed")
-        steps_text = "\n".join(step_lines) if step_lines else "  All steps completed."
+        first_name = (user.name or "there").split()[0]
+        friendly_name = workflow_name.replace(" Automation", "").replace(" automation", "")
 
-        body_text = (
-            f"Hi {user.name or 'there'},\n\n"
-            f"Your workflow \"{workflow_name}\" has completed successfully.\n\n"
-            f"Steps:\n{steps_text}\n\n"
-            f"You can view full details in ORKY.\n\n"
-            f"— ORKY Platform"
+        # Ask Gemini to write the email as clean HTML
+        email_prompt = f"""Write a notification email for an employee named {first_name}.
+Their request for "{friendly_name}" has been approved and completed.
+
+Write the email as HTML that goes inside a <td> tag. Rules:
+- 2-3 short paragraphs ONLY. Be concise.
+- Use <p> tags for each paragraph with style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.7;"
+- If mentioning any links/URLs, wrap them in <a> tags with style="color:#00D4FF;text-decoration:underline;"
+- Do NOT mention "automation", "workflow", "agents", "steps", "Slack channels", channel IDs, or any internal system details
+- Do NOT include raw IDs, API responses, or technical data
+- Write it like a friendly HR/IT team member — warm, short, professional
+- Infer the appropriate next steps from the request type (e.g. payroll processing for reimbursements, ticket tracking for incidents)
+- End with a brief "If you have questions, contact your HR/IT team." line
+
+Also write a short email subject line (max 8 words, no "Re:" or "Subject:" prefix).
+
+Respond in EXACTLY this format:
+SUBJECT: <subject>
+HTML: <html paragraphs>"""
+
+        from services.gemini import generate_chat_response
+        email_content = await generate_chat_response(
+            system_prompt="You write short, professional employee notification emails as clean HTML. Never mention automation, workflows, agents, AI, Slack channel IDs, or internal system details. Keep it to 2-3 paragraphs max.",
+            user_message=email_prompt,
         )
 
-        msg = MIMEMultipart()
+        # Parse subject and HTML body
+        subject = f"Your {friendly_name} request has been approved"
+        body_inner_html = ""
+        if "SUBJECT:" in email_content and "HTML:" in email_content:
+            parts = email_content.split("HTML:", 1)
+            subject_part = parts[0].split("SUBJECT:", 1)[1].strip()
+            if subject_part:
+                subject = subject_part
+            body_inner_html = parts[1].strip()
+        else:
+            body_inner_html = f'<p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.7;">Hi {first_name}, your request for {friendly_name} has been approved and completed. No further action is needed from your side.</p>'
+
+        # Strip markdown backtick wrappers if Gemini added them
+        body_inner_html = body_inner_html.strip().removeprefix("```html").removeprefix("```").removesuffix("```").strip()
+
+        body_html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background-color:#0a0a0a;padding:24px 32px;text-align:center;">
+            <span style="color:#00D4FF;font-size:22px;font-weight:700;letter-spacing:-0.5px;">ORKY</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px;">
+            {body_inner_html}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 32px;border-top:1px solid #f3f4f6;text-align:center;">
+            <p style="margin:0;font-size:11px;color:#9ca3af;">
+              Sent by ORKY &middot; Enterprise AI Platform
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+        msg = MIMEMultipart("alternative")
         msg["From"] = from_email
         msg["To"] = user.email
-        msg["Subject"] = f"Workflow Completed: {workflow_name}"
-        msg.attach(MIMEText(body_text, "plain"))
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body_html, "html"))
 
         with smtplib.SMTP(smtp_server, smtp_port) as server:
             server.starttls()
