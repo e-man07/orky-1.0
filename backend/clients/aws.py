@@ -128,6 +128,7 @@ class AWSClient:
         )
         extracted = {
             "vendor_name": None,
+            "customer_name": None,
             "gstin": None,
             "invoice_number": None,
             "invoice_date": None,
@@ -143,6 +144,8 @@ class AWSClient:
                 value = field.get("ValueDetection", {}).get("Text", "")
                 if field_type == "VENDOR_NAME":
                     extracted["vendor_name"] = value
+                elif field_type in ("RECEIVER_NAME", "CUSTOMER_NAME", "NAME"):
+                    extracted["customer_name"] = value
                 elif field_type == "INVOICE_RECEIPT_ID":
                     extracted["invoice_number"] = value
                 elif field_type == "INVOICE_RECEIPT_DATE":
