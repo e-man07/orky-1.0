@@ -93,7 +93,20 @@ export function Sidebar({
       {/* Logo */}
       <div className="flex h-14 items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2 overflow-hidden">
-          <span className="text-xl font-bold text-logo-blue shrink-0">Orky.io</span>
+          <span className="text-xl font-bold text-logo-blue shrink-0">O</span>
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.span
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                transition={{ duration: 0.15 }}
+                className="text-xl font-bold text-logo-blue overflow-hidden whitespace-nowrap"
+              >
+                rky.io
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
         <motion.button
           onClick={() => setCollapsed(!collapsed)}

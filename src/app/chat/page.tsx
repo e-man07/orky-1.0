@@ -134,6 +134,7 @@ export default function ChatPage() {
                 agent_name: s.agent_name,
                 agent_icon: s.agent_icon || null,
                 agent_color: s.agent_color || null,
+                apps: s.apps || [],
                 status: 'pending' as const,
               })
             )

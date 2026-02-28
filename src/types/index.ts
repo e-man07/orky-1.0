@@ -55,6 +55,7 @@ export interface WorkflowStepState {
   agent_icon: string | null
   agent_color: string | null
   status: WorkflowStepStatus
+  apps?: { slug: string; name: string }[]
   actions?: { app: string; action: string }[]
   result_summary?: string | null
   error?: string | null

@@ -44,6 +44,16 @@ def _build_actions_summary(actions_invoked: list[dict] | None) -> list[dict[str,
     ]
 
 
+def _get_agent_apps(wa: WorkflowAgent) -> list[dict[str, str]]:
+    """Get unique apps used by a workflow agent's actions."""
+    seen: dict[str, str] = {}
+    for aa in wa.agent.actions:
+        app = aa.action.app
+        if app.slug not in seen:
+            seen[app.slug] = app.name
+    return [{"slug": s, "name": n} for s, n in seen.items()]
+
+
 async def run_workflow(execution_id: int, on_event: OnEvent = None) -> None:
     """Run a workflow execution — processes agents sequentially.
 
@@ -94,6 +104,7 @@ async def run_workflow(execution_id: int, on_event: OnEvent = None) -> None:
                     "agent_name": wa.agent.name,
                     "agent_icon": wa.agent.icon,
                     "agent_color": wa.agent.color,
+                    "apps": _get_agent_apps(wa),
                 }
                 for wa in workflow_agents
             ],
@@ -299,6 +310,7 @@ async def resume_workflow(execution_id: int, file_attachment: dict, on_event: On
                     "agent_name": wa.agent.name,
                     "agent_icon": wa.agent.icon,
                     "agent_color": wa.agent.color,
+                    "apps": _get_agent_apps(wa),
                 }
                 for wa in remaining_agents
             ],

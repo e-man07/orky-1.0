@@ -4,40 +4,21 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Bot, User, Check, X, Zap, FileText, ChevronDown, Circle, Loader2 } from 'lucide-react'
+import { Bot, User, Check, X, FileText, ChevronDown, Circle, Loader2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
+import { APP_BY_SLUG } from '@/data/apps'
 import type { SourceCitation, ActionTakenData, FileAttachment, WorkflowProgressState } from '@/types'
 
 const APP_LABELS: Record<string, string> = {
   servicenow: 'ServiceNow',
   jira: 'Jira',
   slack: 'Slack',
+  aws: 'AWS',
   aws_ec2: 'AWS EC2',
   aws_s3: 'AWS S3',
   sharepoint: 'SharePoint',
   snowflake: 'Snowflake',
-}
-
-const ACTION_LABELS: Record<string, string> = {
-  create_incident: 'Created Incident',
-  update_incident: 'Updated Incident',
-  close_incident: 'Closed Incident',
-  get_incident: 'Retrieved Incident',
-  search_incidents: 'Searched Incidents',
-  create_issue: 'Created Issue',
-  update_issue: 'Updated Issue',
-  transition_issue: 'Transitioned Issue',
-  add_comment: 'Added Comment',
-  search_issues: 'Searched Issues',
-  send_message: 'Sent Message',
-  send_approval_request: 'Sent Approval Request',
-  describe_instances: 'Described Instances',
-  create_instance: 'Created Instance',
-  stop_instance: 'Stopped Instance',
-  execute_query: 'Executed Query',
-  list_files: 'Listed Files',
-  upload_file: 'Uploaded File',
-  search_files: 'Searched Files',
+  tinyfish: 'Tinyfish',
 }
 
 interface ChatMessageProps {
@@ -49,6 +30,30 @@ interface ChatMessageProps {
   workflowProgress?: WorkflowProgressState
   userName?: string
   timestamp?: string
+}
+
+function AppLogo({ slug, name }: { slug: string; name: string }) {
+  const app = APP_BY_SLUG[slug]
+  const logoUrl = app?.logoUrl
+
+  return (
+    <div className="flex items-center gap-1">
+      {logoUrl ? (
+        <img
+          src={logoUrl}
+          alt={name}
+          className="h-3.5 w-3.5 rounded-sm object-contain bg-white/5"
+        />
+      ) : (
+        <div className="h-3.5 w-3.5 rounded-sm bg-white/[0.06] flex items-center justify-center">
+          <span className="text-[6px] font-bold text-white/30">
+            {name.charAt(0)}
+          </span>
+        </div>
+      )}
+      <span className="text-[9px] text-white/30">{name}</span>
+    </div>
+  )
 }
 
 export function ChatMessage({
@@ -63,8 +68,9 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const [stepsExpanded, setStepsExpanded] = useState(false)
   const isAssistant = role === 'assistant'
-  const hasActions = actionsTaken && actionsTaken.length > 0
   const hasWorkflowSteps = workflowProgress && workflowProgress.steps.length > 0
+  // Only show action badges for non-workflow messages
+  const hasActions = actionsTaken && actionsTaken.length > 0 && !hasWorkflowSteps
 
   return (
     <motion.div
@@ -114,7 +120,7 @@ export function ChatMessage({
           )}
         </motion.div>
 
-        {/* Action results badge strip */}
+        {/* Ad-hoc action results (non-workflow only) */}
         {hasActions && (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
@@ -122,33 +128,38 @@ export function ChatMessage({
             transition={{ delay: 0.1 }}
             className="flex flex-wrap gap-1.5 mb-1"
           >
-            {actionsTaken.map((action, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.1 + idx * 0.05, type: 'spring', stiffness: 300, damping: 20 }}
-              >
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] font-normal flex items-center gap-1 ${
-                    action.success
-                      ? 'border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-400/80'
-                      : 'border-red-500/20 bg-red-500/[0.06] text-red-400/80'
-                  }`}
+            {actionsTaken.map((action, idx) => {
+              const appLabel = APP_LABELS[action.app] || action.app
+              const appData = APP_BY_SLUG[action.app]
+              const logoUrl = appData?.logoUrl
+              return (
+                <motion.div
+                  key={idx}
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.1 + idx * 0.05, type: 'spring', stiffness: 300, damping: 20 }}
                 >
-                  {action.success ? (
-                    <Check className="h-2.5 w-2.5" />
-                  ) : (
-                    <X className="h-2.5 w-2.5" />
-                  )}
-                  <Zap className="h-2.5 w-2.5" />
-                  <span>{APP_LABELS[action.app] || action.app}</span>
-                  <span className="text-white/20">|</span>
-                  <span>{ACTION_LABELS[action.action] || action.action}</span>
-                </Badge>
-              </motion.div>
-            ))}
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] font-normal flex items-center gap-1.5 ${
+                      action.success
+                        ? 'border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-400/80'
+                        : 'border-red-500/20 bg-red-500/[0.06] text-red-400/80'
+                    }`}
+                  >
+                    {action.success ? (
+                      <Check className="h-2.5 w-2.5" />
+                    ) : (
+                      <X className="h-2.5 w-2.5" />
+                    )}
+                    {logoUrl ? (
+                      <img src={logoUrl} alt={appLabel} className="h-3 w-3 rounded-sm object-contain" />
+                    ) : null}
+                    <span>{appLabel}</span>
+                  </Badge>
+                </motion.div>
+              )
+            })}
           </motion.div>
         )}
 
@@ -186,40 +197,47 @@ export function ChatMessage({
                   transition={{ duration: 0.2 }}
                   className="overflow-hidden"
                 >
-                  <div className="mt-1.5 flex flex-col gap-0.5 rounded-lg glass-subtle px-2.5 py-2">
+                  <div className="mt-1.5 flex flex-col gap-1 rounded-lg glass-subtle px-2.5 py-2">
                     {workflowProgress!.steps.map((step) => (
                       <div
                         key={step.step_order}
-                        className="flex items-center gap-2 text-[10px] py-0.5"
+                        className="flex items-start gap-2 text-[10px] py-1"
                       >
-                        {step.status === 'completed' && (
-                          <Check className="h-2.5 w-2.5 text-emerald-400 shrink-0" />
-                        )}
-                        {step.status === 'failed' && (
-                          <X className="h-2.5 w-2.5 text-red-400 shrink-0" />
-                        )}
-                        {step.status === 'pending' && (
-                          <Circle className="h-2.5 w-2.5 text-white/20 shrink-0" />
-                        )}
-                        {step.status === 'running' && (
-                          <Loader2 className="h-2.5 w-2.5 text-logo-blue animate-spin shrink-0" />
-                        )}
-                        <span
-                          className={
-                            step.status === 'completed'
-                              ? 'text-white/40'
-                              : step.status === 'failed'
-                                ? 'text-red-400/70'
-                                : 'text-white/25'
-                          }
-                        >
-                          {step.agent_name}
-                        </span>
-                        {step.actions && step.actions.length > 0 && (
-                          <span className="text-white/15">
-                            ({step.actions.length} action{step.actions.length > 1 ? 's' : ''})
+                        <div className="shrink-0 mt-0.5">
+                          {step.status === 'completed' && (
+                            <Check className="h-2.5 w-2.5 text-emerald-400" />
+                          )}
+                          {step.status === 'failed' && (
+                            <X className="h-2.5 w-2.5 text-red-400" />
+                          )}
+                          {step.status === 'pending' && (
+                            <Circle className="h-2.5 w-2.5 text-white/20" />
+                          )}
+                          {step.status === 'running' && (
+                            <Loader2 className="h-2.5 w-2.5 text-logo-blue animate-spin" />
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span
+                            className={
+                              step.status === 'completed'
+                                ? 'text-white/40'
+                                : step.status === 'failed'
+                                  ? 'text-red-400/70'
+                                  : 'text-white/25'
+                            }
+                          >
+                            {step.agent_name}
                           </span>
-                        )}
+                          {/* App logos */}
+                          {step.apps && step.apps.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              {step.apps.map((app) => (
+                                <AppLogo key={app.slug} slug={app.slug} name={app.name} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

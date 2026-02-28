@@ -1,89 +1,96 @@
 'use client'
 
-import { useState } from 'react'
-import { Check, Loader2, Circle, X, ChevronDown, AlertTriangle, Zap, Paperclip } from 'lucide-react'
+import { Check, Loader2, Circle, X, AlertTriangle, Paperclip } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { Bot } from 'lucide-react'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion } from 'motion/react'
+import { APP_BY_SLUG } from '@/data/apps'
 import type { WorkflowProgressState, WorkflowStepState } from '@/types'
 
-const APP_LABELS: Record<string, string> = {
-  servicenow: 'ServiceNow',
-  jira: 'Jira',
-  slack: 'Slack',
-  aws_ec2: 'AWS EC2',
-  aws_s3: 'AWS S3',
-  sharepoint: 'SharePoint',
-  snowflake: 'Snowflake',
-}
+function AppLogo({ slug, name }: { slug: string; name: string }) {
+  const app = APP_BY_SLUG[slug]
+  const logoUrl = app?.logoUrl
 
-interface WorkflowProgressProps {
-  progress: WorkflowProgressState
+  return (
+    <div className="flex items-center gap-1.5">
+      {logoUrl ? (
+        <img
+          src={logoUrl}
+          alt={name}
+          className="h-4 w-4 rounded-sm object-contain bg-white/5"
+        />
+      ) : (
+        <div className="h-4 w-4 rounded-sm bg-white/[0.06] flex items-center justify-center">
+          <span className="text-[7px] font-bold text-white/30">
+            {name.charAt(0)}
+          </span>
+        </div>
+      )}
+      <span className="text-[10px] text-white/30">{name}</span>
+    </div>
+  )
 }
 
 function StepRow({ step, index }: { step: WorkflowStepState; index: number }) {
-  const [expanded, setExpanded] = useState(false)
-  const isExpandable =
-    (step.status === 'completed' || step.status === 'failed') &&
-    ((step.actions && step.actions.length > 0) || step.error)
+  const isRunning = step.status === 'running'
+  const isCompleted = step.status === 'completed'
+  const isFailed = step.status === 'failed'
+  const isPending = step.status === 'pending'
 
   return (
     <motion.div
       initial={{ opacity: 0, x: -12 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.05, duration: 0.25 }}
+      className={`flex items-start gap-2.5 rounded-lg px-2.5 py-2 transition-colors ${
+        isRunning ? 'bg-white/[0.02]' : ''
+      }`}
     >
-      <button
-        type="button"
-        onClick={() => isExpandable && setExpanded(!expanded)}
-        className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors ${
-          isExpandable ? 'hover:bg-white/[0.03] cursor-pointer' : 'cursor-default'
-        }`}
-      >
-        {/* Status icon */}
-        <div className="relative shrink-0">
-          {step.status === 'completed' && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-            >
-              <Check className="h-3.5 w-3.5 text-emerald-400" />
-            </motion.div>
-          )}
-          {step.status === 'running' && (
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="relative"
-            >
-              <Loader2 className="h-3.5 w-3.5 text-logo-blue animate-spin" />
-              <div className="absolute inset-[-3px] rounded-full animate-glow-pulse-sm" />
-            </motion.div>
-          )}
-          {step.status === 'failed' && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-            >
-              <X className="h-3.5 w-3.5 text-red-400" />
-            </motion.div>
-          )}
-          {step.status === 'pending' && (
-            <Circle className="h-3.5 w-3.5 text-white/20" />
-          )}
-        </div>
+      {/* Status icon */}
+      <div className="relative shrink-0 mt-0.5">
+        {isCompleted && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+          >
+            <Check className="h-3.5 w-3.5 text-emerald-400" />
+          </motion.div>
+        )}
+        {isRunning && (
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="relative"
+          >
+            <Loader2 className="h-3.5 w-3.5 text-logo-blue animate-spin" />
+            <div className="absolute inset-[-3px] rounded-full animate-glow-pulse-sm" />
+          </motion.div>
+        )}
+        {isFailed && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+          >
+            <X className="h-3.5 w-3.5 text-red-400" />
+          </motion.div>
+        )}
+        {isPending && (
+          <Circle className="h-3.5 w-3.5 text-white/15" />
+        )}
+      </div>
 
+      {/* Content */}
+      <div className="flex flex-col gap-1 min-w-0">
         {/* Agent name */}
         <span
-          className={`flex-1 transition-colors duration-200 ${
-            step.status === 'completed'
+          className={`text-xs leading-tight transition-colors duration-200 ${
+            isCompleted
               ? 'text-white/40'
-              : step.status === 'running'
+              : isRunning
                 ? 'font-medium text-white/80'
-                : step.status === 'failed'
+                : isFailed
                   ? 'text-red-400/70'
                   : 'text-white/20'
           }`}
@@ -91,64 +98,28 @@ function StepRow({ step, index }: { step: WorkflowStepState; index: number }) {
           {step.agent_name}
         </span>
 
-        {/* Expand chevron */}
-        {isExpandable && (
-          <ChevronDown
-            className={`h-3 w-3 text-white/20 transition-transform duration-200 ${
-              expanded ? 'rotate-180' : ''
-            }`}
-          />
+        {/* App logos row */}
+        {step.apps && step.apps.length > 0 && (
+          <div className="flex items-center gap-3 flex-wrap">
+            {step.apps.map((app) => (
+              <AppLogo key={app.slug} slug={app.slug} name={app.name} />
+            ))}
+          </div>
         )}
-      </button>
 
-      {/* Expanded details */}
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="ml-6 pb-2 pt-0.5 flex flex-col gap-1.5">
-              {/* Actions badges */}
-              {step.actions && step.actions.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {step.actions.map((action, idx) => (
-                    <Badge
-                      key={idx}
-                      variant="outline"
-                      className="text-[9px] font-normal flex items-center gap-1 border-white/[0.06] bg-white/[0.02] text-white/40"
-                    >
-                      <Zap className="h-2 w-2" />
-                      <span>{APP_LABELS[action.app] || action.app}</span>
-                      <span className="text-white/15">|</span>
-                      <span>{action.action}</span>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-
-              {/* Error message */}
-              {step.error && (
-                <p className="text-[10px] text-red-400/70 leading-relaxed">
-                  {step.error}
-                </p>
-              )}
-
-              {/* Result summary */}
-              {step.result_summary && (
-                <p className="text-[10px] text-white/30 leading-relaxed">
-                  {step.result_summary}
-                </p>
-              )}
-            </div>
-          </motion.div>
+        {/* Error message */}
+        {isFailed && step.error && (
+          <p className="text-[10px] text-red-400/60 leading-relaxed mt-0.5">
+            {step.error}
+          </p>
         )}
-      </AnimatePresence>
+      </div>
     </motion.div>
   )
+}
+
+interface WorkflowProgressProps {
+  progress: WorkflowProgressState
 }
 
 export function WorkflowProgress({ progress }: WorkflowProgressProps) {
@@ -181,9 +152,9 @@ export function WorkflowProgress({ progress }: WorkflowProgressProps) {
           <span className="text-[11px] font-medium text-white/50">ORKY</span>
         </motion.div>
 
-        <div className="rounded-xl glass-subtle px-3 py-3 min-w-[280px]">
+        <div className="rounded-xl glass-subtle px-3 py-3 min-w-[300px]">
           {/* Workflow title */}
-          <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/[0.06]">
             {!progress.isComplete && (
               <Loader2 className="h-3 w-3 text-logo-blue animate-spin shrink-0" />
             )}
@@ -233,7 +204,7 @@ export function WorkflowProgress({ progress }: WorkflowProgressProps) {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex items-center gap-1 mt-2 ml-2"
+              className="flex items-center gap-1 mt-2.5 ml-2"
             >
               <div className="h-1.5 w-1.5 rounded-full bg-white/30 typing-dot" />
               <div className="h-1.5 w-1.5 rounded-full bg-white/30 typing-dot" />
