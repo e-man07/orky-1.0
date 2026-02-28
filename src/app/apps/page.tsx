@@ -123,7 +123,7 @@ export default function AppsPage() {
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.08, duration: 0.3 }}
-            className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 mb-6"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-6 py-6 mb-6"
           >
             <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
               <StatItem label="Available Applications" value={totalApps} />
@@ -197,10 +197,10 @@ export default function AppsPage() {
 function StatItem({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
     <div className="text-center">
-      <div className={`text-lg font-semibold ${accent ? 'text-logo-blue' : 'text-white/70'}`}>
+      <div className={`text-2xl font-bold ${accent ? 'text-logo-blue' : 'text-white/70'}`}>
         {value}
       </div>
-      <div className="text-[10px] text-white/30 leading-tight">{label}</div>
+      <div className="text-xs text-white/35 mt-1 leading-tight">{label}</div>
     </div>
   )
 }
