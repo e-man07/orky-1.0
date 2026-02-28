@@ -11,3 +11,4 @@ pgvector
 python-jose[cryptography]
 httpx
 boto3
+snowflake-connector-python
