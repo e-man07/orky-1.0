@@ -9,7 +9,7 @@ import { ChatInput } from '@/components/ChatInput'
 import { ExecutionMessage } from '@/components/ExecutionMessage'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Bot } from 'lucide-react'
+import { Bot, BookOpen, Zap } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import type {
   ChatMessageData,
