@@ -1,11 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Bot, User, Check, X, Zap } from 'lucide-react'
-import { motion } from 'motion/react'
-import type { SourceCitation, ActionTakenData } from '@/types'
+import { Bot, User, Check, X, Zap, FileText, ChevronDown, Circle, Loader2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
+import type { SourceCitation, ActionTakenData, FileAttachment, WorkflowProgressState } from '@/types'
 
 const APP_LABELS: Record<string, string> = {
   servicenow: 'ServiceNow',
@@ -44,6 +45,8 @@ interface ChatMessageProps {
   content: string
   sources?: SourceCitation[]
   actionsTaken?: ActionTakenData[]
+  fileAttachment?: FileAttachment
+  workflowProgress?: WorkflowProgressState
   userName?: string
   timestamp?: string
 }
@@ -53,11 +56,15 @@ export function ChatMessage({
   content,
   sources,
   actionsTaken,
+  fileAttachment,
+  workflowProgress,
   userName,
   timestamp,
 }: ChatMessageProps) {
+  const [stepsExpanded, setStepsExpanded] = useState(false)
   const isAssistant = role === 'assistant'
   const hasActions = actionsTaken && actionsTaken.length > 0
+  const hasWorkflowSteps = workflowProgress && workflowProgress.steps.length > 0
 
   return (
     <motion.div
@@ -142,6 +149,100 @@ export function ChatMessage({
                 </Badge>
               </motion.div>
             ))}
+          </motion.div>
+        )}
+
+        {/* Collapsed workflow steps summary */}
+        {hasWorkflowSteps && isAssistant && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mb-1"
+          >
+            <button
+              type="button"
+              onClick={() => setStepsExpanded(!stepsExpanded)}
+              className="flex items-center gap-1.5 text-[10px] text-white/40 hover:text-white/60 transition-colors cursor-pointer"
+            >
+              <Check className="h-2.5 w-2.5 text-emerald-400" />
+              <span>
+                {workflowProgress!.steps.filter((s) => s.status === 'completed').length}/
+                {workflowProgress!.steps.length} steps completed
+              </span>
+              <ChevronDown
+                className={`h-2.5 w-2.5 transition-transform duration-200 ${
+                  stepsExpanded ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            <AnimatePresence>
+              {stepsExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-1.5 flex flex-col gap-0.5 rounded-lg glass-subtle px-2.5 py-2">
+                    {workflowProgress!.steps.map((step) => (
+                      <div
+                        key={step.step_order}
+                        className="flex items-center gap-2 text-[10px] py-0.5"
+                      >
+                        {step.status === 'completed' && (
+                          <Check className="h-2.5 w-2.5 text-emerald-400 shrink-0" />
+                        )}
+                        {step.status === 'failed' && (
+                          <X className="h-2.5 w-2.5 text-red-400 shrink-0" />
+                        )}
+                        {step.status === 'pending' && (
+                          <Circle className="h-2.5 w-2.5 text-white/20 shrink-0" />
+                        )}
+                        {step.status === 'running' && (
+                          <Loader2 className="h-2.5 w-2.5 text-logo-blue animate-spin shrink-0" />
+                        )}
+                        <span
+                          className={
+                            step.status === 'completed'
+                              ? 'text-white/40'
+                              : step.status === 'failed'
+                                ? 'text-red-400/70'
+                                : 'text-white/25'
+                          }
+                        >
+                          {step.agent_name}
+                        </span>
+                        {step.actions && step.actions.length > 0 && (
+                          <span className="text-white/15">
+                            ({step.actions.length} action{step.actions.length > 1 ? 's' : ''})
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+
+        {/* File attachment badge on user messages */}
+        {fileAttachment && !isAssistant && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex"
+          >
+            <Badge
+              variant="outline"
+              className="border-logo-blue/15 bg-logo-blue/[0.04] text-logo-blue/60 text-[10px] font-normal flex items-center gap-1"
+            >
+              <FileText className="h-2.5 w-2.5" />
+              {fileAttachment.filename}
+            </Badge>
           </motion.div>
         )}
 

@@ -43,3 +43,49 @@ export async function apiFetchJson<T = any>(
   }
   return res.json()
 }
+
+export async function* parseSSEStream(
+  response: Response,
+): AsyncGenerator<{ type: string; data: any }> {
+  const reader = response.body?.getReader()
+  if (!reader) return
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      const lines = buffer.split('\n')
+      // Keep the last incomplete line in the buffer
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data: ')) continue
+
+        try {
+          const parsed = JSON.parse(trimmed.slice(6))
+          yield parsed
+        } catch {
+          // Skip malformed JSON lines
+        }
+      }
+    }
+
+    // Process any remaining buffer
+    if (buffer.trim().startsWith('data: ')) {
+      try {
+        yield JSON.parse(buffer.trim().slice(6))
+      } catch {
+        // Skip
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}

@@ -7,11 +7,19 @@ import { Sidebar } from '@/components/Sidebar'
 import { ChatMessage } from '@/components/ChatMessage'
 import { ChatInput } from '@/components/ChatInput'
 import { ExecutionMessage } from '@/components/ExecutionMessage'
+import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sparkles, BookOpen, Zap } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
-import type { ChatMessageData, ExecutionStatus, AgentLogData } from '@/types'
-import { apiFetch } from '@/lib/api'
+import type {
+  ChatMessageData,
+  ExecutionStatus,
+  AgentLogData,
+  FileAttachment,
+  WorkflowProgressState,
+  WorkflowStepState,
+} from '@/types'
+import { apiFetch, parseSSEStream } from '@/lib/api'
 
 interface PendingExecution {
   status: ExecutionStatus
@@ -34,6 +42,9 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false)
   const [pendingExecution, setPendingExecution] =
     useState<PendingExecution | null>(null)
+  const [workflowProgress, setWorkflowProgress] =
+    useState<WorkflowProgressState | null>(null)
+  const workflowProgressRef = useRef<WorkflowProgressState | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -44,7 +55,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages, pendingExecution])
+  }, [messages, pendingExecution, workflowProgress])
 
   function scrollToBottom() {
     if (scrollRef.current) {
@@ -56,11 +67,15 @@ export default function ChatPage() {
     setMessages([])
     setSessionId(null)
     setPendingExecution(null)
+    setWorkflowProgress(null)
+    workflowProgressRef.current = null
   }, [])
 
   const handleSelectSession = useCallback(async (id: number) => {
     setSessionId(id)
     setPendingExecution(null)
+    setWorkflowProgress(null)
+    workflowProgressRef.current = null
     try {
       const res = await apiFetch(`/api/chat/sessions/${id}/messages`)
       if (res.ok) {
@@ -73,18 +88,21 @@ export default function ChatPage() {
   }, [])
 
   const handleSend = useCallback(
-    async (message: string) => {
+    async (message: string, fileAttachment?: FileAttachment) => {
       if (loading) return
 
       const userMsg: ChatMessageData = {
         id: Date.now(),
         role: 'user',
         content: message,
+        fileAttachment,
         createdAt: new Date().toISOString(),
       }
       setMessages((prev) => [...prev, userMsg])
       setLoading(true)
       setPendingExecution({ status: 'parsing', logs: [], isAction: false })
+      setWorkflowProgress(null)
+      workflowProgressRef.current = null
 
       try {
         const conversationHistory = messages.slice(-10).map((m) => ({
@@ -92,36 +110,147 @@ export default function ChatPage() {
           content: m.content,
         }))
 
-        const res = await apiFetch('/api/chat', {
+        const res = await apiFetch('/api/chat/stream', {
           method: 'POST',
           body: JSON.stringify({
             message,
             sessionId,
             conversationHistory,
+            ...(fileAttachment ? { fileAttachment } : {}),
           }),
         })
 
         if (!res.ok) throw new Error('Chat request failed')
 
-        const data = await res.json()
+        for await (const event of parseSSEStream(res)) {
+          const { type, data } = event
 
-        if (data.sessionId && !sessionId) {
-          setSessionId(data.sessionId)
-        }
+          if (type === 'workflow_started') {
+            // Hide the generic execution message, show workflow progress
+            setPendingExecution(null)
+            const steps: WorkflowStepState[] = data.steps.map(
+              (s: any) => ({
+                step_order: s.step_order,
+                agent_name: s.agent_name,
+                agent_icon: s.agent_icon || null,
+                agent_color: s.agent_color || null,
+                status: 'pending' as const,
+              })
+            )
+            const newProgress: WorkflowProgressState = {
+              workflow_name: data.workflow_name,
+              steps,
+              isComplete: false,
+              isPaused: false,
+            }
+            workflowProgressRef.current = newProgress
+            setWorkflowProgress({ ...newProgress })
+          } else if (type === 'step_started') {
+            const prev: WorkflowProgressState | null = workflowProgressRef.current
+            if (prev) {
+              const updated: WorkflowProgressState = {
+                ...prev,
+                steps: prev.steps.map((s: WorkflowStepState) =>
+                  s.step_order === data.step_order
+                    ? { ...s, status: 'running' as const }
+                    : s
+                ),
+              }
+              workflowProgressRef.current = updated
+              setWorkflowProgress({ ...updated })
+            }
+          } else if (type === 'step_completed') {
+            const prev: WorkflowProgressState | null = workflowProgressRef.current
+            if (prev) {
+              const updated: WorkflowProgressState = {
+                ...prev,
+                steps: prev.steps.map((s: WorkflowStepState) =>
+                  s.step_order === data.step_order
+                    ? {
+                        ...s,
+                        status: 'completed' as const,
+                        actions: data.actions || [],
+                        result_summary: data.result_summary || null,
+                      }
+                    : s
+                ),
+              }
+              workflowProgressRef.current = updated
+              setWorkflowProgress({ ...updated })
+            }
+          } else if (type === 'step_failed') {
+            const prev: WorkflowProgressState | null = workflowProgressRef.current
+            if (prev) {
+              const updated: WorkflowProgressState = {
+                ...prev,
+                steps: prev.steps.map((s: WorkflowStepState) =>
+                  s.step_order === data.step_order
+                    ? { ...s, status: 'failed' as const, error: data.error }
+                    : s
+                ),
+              }
+              workflowProgressRef.current = updated
+              setWorkflowProgress({ ...updated })
+            }
+          } else if (type === 'workflow_paused') {
+            const prev: WorkflowProgressState | null = workflowProgressRef.current
+            if (prev) {
+              const updated: WorkflowProgressState = { ...prev, isPaused: true }
+              workflowProgressRef.current = updated
+              setWorkflowProgress({ ...updated })
+            }
+            // Enable input so user can attach a file
+            setLoading(false)
+          } else if (type === 'response') {
+            // Final response — create assistant message with embedded workflow progress
+            if (data.sessionId && !sessionId) {
+              setSessionId(data.sessionId)
+            }
 
-        const assistantMsg: ChatMessageData = {
-          id: Date.now() + 1,
-          role: 'assistant',
-          content: data.response,
-          sources: data.sources,
-          actionsTaken: data.actionsTaken,
-          createdAt: new Date().toISOString(),
+            const finalProgress = workflowProgressRef.current
+            const isPaused = finalProgress?.isPaused ?? false
+
+            if (isPaused) {
+              // Workflow paused for file upload — keep the live WorkflowProgress
+              // visible and add the response as a message WITHOUT clearing progress
+              const assistantMsg: ChatMessageData = {
+                id: Date.now() + 1,
+                role: 'assistant',
+                content: data.response,
+                sources: data.sources,
+                actionsTaken: data.actionsTaken,
+                createdAt: new Date().toISOString(),
+              }
+              setMessages((prev) => [...prev, assistantMsg])
+              // Don't clear workflowProgress — keep paused UI visible
+              setPendingExecution(null)
+            } else {
+              // Workflow completed — embed progress in message and clear live view
+              if (finalProgress) {
+                finalProgress.isComplete = true
+              }
+
+              const assistantMsg: ChatMessageData = {
+                id: Date.now() + 1,
+                role: 'assistant',
+                content: data.response,
+                sources: data.sources,
+                actionsTaken: data.actionsTaken,
+                workflowProgress: finalProgress || undefined,
+                createdAt: new Date().toISOString(),
+              }
+              setMessages((prev) => [...prev, assistantMsg])
+              setWorkflowProgress(null)
+              workflowProgressRef.current = null
+              setPendingExecution(null)
+            }
+          }
         }
-        setMessages((prev) => [...prev, assistantMsg])
-        setPendingExecution(null)
       } catch (error) {
         console.error('Chat error:', error)
         setPendingExecution({ status: 'failed', logs: [] })
+        setWorkflowProgress(null)
+        workflowProgressRef.current = null
         setTimeout(() => setPendingExecution(null), 3000)
       } finally {
         setLoading(false)
@@ -178,7 +307,7 @@ export default function ChatPage() {
         <ScrollArea className="flex-1">
           <div ref={scrollRef} className="flex flex-col gap-5 p-6">
             <AnimatePresence>
-              {messages.length === 0 && !pendingExecution && (
+              {messages.length === 0 && !pendingExecution && !workflowProgress && (
                 <motion.div
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -251,6 +380,8 @@ export default function ChatPage() {
                 content={msg.content}
                 sources={msg.sources}
                 actionsTaken={msg.actionsTaken}
+                fileAttachment={msg.fileAttachment}
+                workflowProgress={msg.workflowProgress}
                 userName={user?.name}
                 timestamp={new Date(msg.createdAt).toLocaleTimeString([], {
                   hour: '2-digit',
@@ -259,8 +390,16 @@ export default function ChatPage() {
               />
             ))}
 
+            {/* Live workflow progress (before final response arrives) */}
             <AnimatePresence>
-              {pendingExecution && (
+              {workflowProgress && (
+                <WorkflowProgress progress={workflowProgress} />
+              )}
+            </AnimatePresence>
+
+            {/* Fallback generic execution spinner for non-workflow intents */}
+            <AnimatePresence>
+              {pendingExecution && !workflowProgress && (
                 <ExecutionMessage
                   status={pendingExecution.status}
                   logs={pendingExecution.logs}

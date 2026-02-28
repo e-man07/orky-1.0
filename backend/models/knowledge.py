@@ -74,6 +74,7 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     sources = Column(JSON, nullable=True)
+    embedding = Column(Vector(768), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     session = relationship("ChatSession", back_populates="messages")

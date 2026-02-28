@@ -35,6 +35,7 @@ class ChatInput(BaseModel):
     message: str
     sessionId: int | None = None
     conversationHistory: list[dict] | None = None
+    fileAttachment: dict | None = None  # {s3_bucket, s3_key, filename}
 
 
 class ActionTakenResponse(BaseModel):

@@ -77,9 +77,9 @@ export function Sidebar({
 
   const navItems = [
     { label: 'New Chat', icon: MessageSquarePlus, onClick: onNewChat, href: '' },
-    { label: 'Chat', icon: BookOpen, onClick: () => router.push('/chat'), href: '/chat' },
-    { label: 'Admin', icon: Database, onClick: () => router.push('/admin'), href: '/admin' },
-    { label: 'Apps', icon: Package, onClick: () => router.push('/apps'), href: '/apps' },
+    { label: 'Chats', icon: BookOpen, onClick: () => router.push('/chat'), href: '/chat' },
+    { label: 'Admin Console', icon: Settings, onClick: () => router.push('/admin'), href: '/admin' },
+    { label: 'Applications', icon: Package, onClick: () => router.push('/apps'), href: '/apps' },
     { label: 'Agents', icon: Bot, onClick: () => router.push('/agents'), href: '/agents' },
     { label: 'Workflows', icon: GitBranch, onClick: () => router.push('/workflows'), href: '/workflows' },
   ]
@@ -93,20 +93,7 @@ export function Sidebar({
       {/* Logo */}
       <div className="flex h-14 items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2 overflow-hidden">
-          <span className="text-xl font-bold text-logo-blue shrink-0">ORKY</span>
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: 0.2 }}
-                className="text-xs text-white/30 overflow-hidden whitespace-nowrap"
-              >
-                KB
-              </motion.span>
-            )}
-          </AnimatePresence>
+          <span className="text-xl font-bold text-logo-blue shrink-0">Orky.io</span>
         </div>
         <motion.button
           onClick={() => setCollapsed(!collapsed)}

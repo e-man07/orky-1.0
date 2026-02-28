@@ -56,6 +56,13 @@ Rules:
 8. Create the minimum number of agents needed — don't over-split simple workflows
 9. If the workflow mentions a service not available in the catalog, still create the agent but note the limitation
 
+File upload awareness:
+- These workflows are triggered from a chat interface where users can attach files (images, PDFs).
+- When a user attaches a file, it is uploaded to S3 and the S3 path (s3_bucket, s3_key) is included in the trigger input context.
+- Some actions require files from S3 — look at their input parameters. Any action that takes "s3_bucket" and "s3_key" parameters is a file-dependent action (e.g., extract_invoice, detect_document_text).
+- When a workflow uses file-dependent actions, the agent's taskPrompt MUST instruct it to read the s3_bucket and s3_key from the trigger input context (available in the _triggerInput variable).
+- Example taskPrompt for a file-dependent agent: "Extract invoice data from the uploaded file. Use the s3_bucket and s3_key provided in the trigger input context to call extract_invoice."
+
 Respond with ONLY the JSON object. No markdown fences, no explanations."""
 
     user_prompt = f"""Design a workflow for the following description:

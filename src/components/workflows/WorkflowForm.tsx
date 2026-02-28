@@ -64,10 +64,14 @@ export function WorkflowForm({ workflow, onSaved, onExecute }: WorkflowFormProps
     setGenerateError('')
 
     try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 120000) // 2 min timeout for AI generation
       const res = await apiFetch('/api/workflows/generate', {
         method: 'POST',
         body: JSON.stringify({ description }),
+        signal: controller.signal,
       })
+      clearTimeout(timeout)
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Generation failed' }))

@@ -93,6 +93,8 @@ export const APP_CATALOG: AppDefinition[] = [
       { name: 'search_incidents', displayName: 'Search Incidents', description: 'Search for incidents using a query filter', actionType: 'rest_api', inputSchema: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } } } },
       { name: 'create_ritm', displayName: 'Create RITM', description: 'Create a new Requested Item (RITM) in ServiceNow', actionType: 'rest_api', inputSchema: { type: 'object', properties: { short_description: { type: 'string' }, description: { type: 'string' }, cat_item: { type: 'string' }, assignment_group: { type: 'string' }, urgency: { type: 'string', enum: ['1', '2', '3'] } }, required: ['short_description'] } },
       { name: 'close_ritm', displayName: 'Close RITM', description: 'Close a Requested Item (RITM) with resolution notes', actionType: 'rest_api', inputSchema: { type: 'object', properties: { sys_id: { type: 'string' }, close_notes: { type: 'string' } }, required: ['sys_id', 'close_notes'] } },
+      { name: 'get_user_record', displayName: 'Get User Record', description: 'Retrieve employee record from ServiceNow to verify employment type (FTE/contractor), active status, and department', actionType: 'rest_api', inputSchema: { type: 'object', properties: { employee_email: { type: 'string' } }, required: ['employee_email'] } },
+      { name: 'get_hr_profile', displayName: 'Get HR Profile', description: 'Fetch HR profile with designation, band, department, and monthly reimbursement limit for an employee', actionType: 'rest_api', inputSchema: { type: 'object', properties: { employee_email: { type: 'string' } }, required: ['employee_email'] } },
     ],
   },
   {
@@ -113,6 +115,9 @@ export const APP_CATALOG: AppDefinition[] = [
       { name: 'stop_instance', displayName: 'Stop EC2 Instance', description: 'Stop a running EC2 instance', actionType: 'rest_api', inputSchema: { type: 'object', properties: { instance_id: { type: 'string' } }, required: ['instance_id'] } },
       { name: 'list_s3_buckets', displayName: 'List S3 Buckets', description: 'List all S3 buckets in the account', actionType: 'rest_api', inputSchema: { type: 'object', properties: {} } },
       { name: 'put_s3_object', displayName: 'Upload to S3', description: 'Upload an object to an S3 bucket', actionType: 'rest_api', inputSchema: { type: 'object', properties: { bucket_name: { type: 'string' }, key: { type: 'string' }, body: { type: 'string' } }, required: ['bucket_name', 'key', 'body'] } },
+      { name: 'extract_invoice', displayName: 'Extract Invoice Data', description: 'Use AWS Textract AnalyzeExpense to extract structured data from an invoice (vendor name, GSTIN, invoice number, date, amounts, tax breakup, line items)', actionType: 'rest_api', inputSchema: { type: 'object', properties: { s3_bucket: { type: 'string' }, s3_key: { type: 'string' } }, required: ['s3_bucket', 's3_key'] } },
+      { name: 'validate_invoice', displayName: 'Validate Invoice', description: 'Validate extracted invoice data against employee details (name match, GSTIN format, date range, tax calculations)', actionType: 'rest_api', inputSchema: { type: 'object', properties: { invoice_data: { type: 'object' }, employee_name: { type: 'string' }, expected_billing_period: { type: 'string' } }, required: ['invoice_data', 'employee_name'] } },
+      { name: 'detect_document_text', displayName: 'Detect Document Text', description: 'Use AWS Textract to detect and extract raw text from a document for quality assessment', actionType: 'rest_api', inputSchema: { type: 'object', properties: { s3_bucket: { type: 'string' }, s3_key: { type: 'string' } }, required: ['s3_bucket', 's3_key'] } },
     ],
   },
   {
@@ -139,7 +144,7 @@ export const APP_CATALOG: AppDefinition[] = [
     slug: 'workday',
     description: 'Human capital management platform for HR, payroll, and talent management',
     icon: 'Package',
-    logoUrl: '/logos/workday.svg',
+    logoUrl: '/logos/workday-logo.png',
     category: 'HCM',
     credentialFields: [
       { key: 'base_url', label: 'Base URL', placeholder: 'https://wd5-impl-services1.workday.com' },
@@ -178,7 +183,7 @@ export const APP_CATALOG: AppDefinition[] = [
     slug: 'o365',
     description: 'Microsoft 365 suite for email, calendar, and productivity tools',
     icon: 'Package',
-    logoUrl: '/logos/o365.svg',
+    logoUrl: '/logos/microsoft-logo.png',
     category: 'Productivity',
     credentialFields: [
       { key: 'tenant_id', label: 'Tenant ID', placeholder: 'Azure AD Tenant ID' },
@@ -229,7 +234,7 @@ export const APP_CATALOG: AppDefinition[] = [
     slug: 'sharepoint',
     description: 'Microsoft SharePoint for document management and collaboration',
     icon: 'FileText',
-    logoUrl: '/logos/sharepoint.svg',
+    logoUrl: '/logos/sharepoint-logo.webp',
     category: 'Collaboration',
     credentialFields: [
       { key: 'tenant_id', label: 'Tenant ID', placeholder: 'Azure AD Tenant ID' },
@@ -286,7 +291,7 @@ export const APP_CATALOG: AppDefinition[] = [
     slug: 'freshworks',
     description: 'Customer engagement platform for support, sales, and marketing',
     icon: 'Package',
-    logoUrl: '/logos/freshworks.svg',
+    logoUrl: '/logos/freshworks-logo.jpeg',
     category: 'Customer Support',
     credentialFields: [
       { key: 'domain', label: 'Domain', placeholder: 'yourcompany.freshdesk.com' },
@@ -332,6 +337,21 @@ export const APP_CATALOG: AppDefinition[] = [
       { name: 'get_payroll_summary', displayName: 'Get Payroll Summary', description: 'Get payroll summary for a pay period', actionType: 'rest_api', inputSchema: { type: 'object', properties: { pay_period: { type: 'string' }, department: { type: 'string' } } } },
     ],
   },
+  {
+    name: 'Tinyfish',
+    slug: 'tinyfish',
+    description: 'AI-powered browser agent that navigates the GST portal to verify vendor GSTIN numbers and retrieve taxpayer details',
+    icon: 'Search',
+    logoUrl: '/logos/tinyfish-logo.png',
+    category: 'Compliance',
+    credentialFields: [
+      { key: 'api_key', label: 'API Key', type: 'password' },
+    ],
+    actions: [
+      { name: 'verify_gstin', displayName: 'Verify GSTIN', description: 'Browse the GST portal to verify a GSTIN number and retrieve vendor/taxpayer details (legal name, status, registration date, state, business type)', actionType: 'rest_api', inputSchema: { type: 'object', properties: { gstin: { type: 'string' } }, required: ['gstin'] } },
+      { name: 'validate_tax_breakup', displayName: 'Validate Tax Breakup', description: 'Verify that CGST/SGST/IGST amounts are correctly calculated based on applicable GST rates', actionType: 'rest_api', inputSchema: { type: 'object', properties: { subtotal: { type: 'number' }, cgst: { type: 'number' }, sgst: { type: 'number' }, igst: { type: 'number' }, total: { type: 'number' }, gst_rate: { type: 'number' } }, required: ['subtotal', 'cgst', 'sgst', 'igst', 'total', 'gst_rate'] } },
+    ],
+  },
   // --- Pro Apps ---
   { slug: 'google-workspace', name: 'Google Workspace', description: 'Email, calendar, docs, and collaboration suite for businesses', icon: 'Package', logoUrl: '', category: 'Productivity', actions: [], credentialFields: [], pro: true },
   { slug: 'github', name: 'GitHub', description: 'Source code management and CI/CD platform for developers', icon: 'Package', logoUrl: '', category: 'DevOps', actions: [], credentialFields: [], pro: true },
@@ -362,7 +382,7 @@ export const APP_CATALOG: AppDefinition[] = [
   { slug: 'oracle', name: 'Oracle', description: 'Enterprise database and application software for business management', icon: 'Package', logoUrl: '', category: 'ERP', actions: [], credentialFields: [], pro: true },
   { slug: 'zoom', name: 'Zoom', description: 'Video conferencing and unified communications platform', icon: 'Package', logoUrl: '', category: 'Communication', actions: [], credentialFields: [], pro: true },
   { slug: 'webex', name: 'Webex', description: 'Enterprise video conferencing and collaboration platform', icon: 'Package', logoUrl: '', category: 'Communication', actions: [], credentialFields: [], pro: true },
-  { slug: 'microsoft-teams', name: 'Microsoft Teams', description: 'Team collaboration platform with chat, calls, and file sharing', icon: 'Package', logoUrl: '', category: 'Collaboration', actions: [], credentialFields: [], pro: true },
+  { slug: 'microsoft-teams', name: 'Microsoft Teams', description: 'Team collaboration platform with chat, calls, and file sharing', icon: 'Package', logoUrl: '/logos/microsoft-logo.png', category: 'Collaboration', actions: [], credentialFields: [], pro: true },
   { slug: 'notion', name: 'Notion', description: 'Workspace platform for notes, databases, and team collaboration', icon: 'Package', logoUrl: '', category: 'Productivity', actions: [], credentialFields: [], pro: true },
   { slug: 'asana', name: 'Asana', description: 'Project management platform for tracking work and team coordination', icon: 'Package', logoUrl: '', category: 'Project Management', actions: [], credentialFields: [], pro: true },
   { slug: 'monday-com', name: 'Monday.com', description: 'Work OS platform for managing projects and workflows', icon: 'Package', logoUrl: '', category: 'Project Management', actions: [], credentialFields: [], pro: true },
@@ -391,7 +411,7 @@ export const APP_CATALOG: AppDefinition[] = [
 ]
 
 /** Slugs that are fully configurable today — the rest show "Coming Soon" */
-export const CONFIGURABLE_SLUGS = new Set(['servicenow', 'aws', 'snowflake', 'slack', 'sharepoint'])
+export const CONFIGURABLE_SLUGS = new Set(['servicenow', 'aws', 'snowflake', 'slack', 'sharepoint', 'tinyfish'])
 
 /** Lookup helpers */
 export const APP_BY_SLUG = Object.fromEntries(APP_CATALOG.map((a) => [a.slug, a]))

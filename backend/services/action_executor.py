@@ -60,6 +60,10 @@ async def execute_action(
                 result = await client.create_ritm(params)
             elif action_name == "close_ritm":
                 result = await client.close_ritm(params["sys_id"], params["close_notes"])
+            elif action_name == "get_user_record":
+                result = await client.get_user_record(params)
+            elif action_name == "get_hr_profile":
+                result = await client.get_hr_profile(params)
             else:
                 raise ValueError(f"Unknown ServiceNow action: {action_name}")
 
@@ -79,6 +83,12 @@ async def execute_action(
                 result = await client.put_object(params["bucket_name"], params["key"], params["body"], params.get("content_type"))
             elif action_name == "create_bucket":
                 result = await client.create_bucket(params["bucket_name"], params.get("region"))
+            elif action_name == "extract_invoice":
+                result = await client.extract_invoice(params)
+            elif action_name == "validate_invoice":
+                result = await client.validate_invoice(params)
+            elif action_name == "detect_document_text":
+                result = await client.detect_document_text(params)
             else:
                 raise ValueError(f"Unknown AWS action: {action_name}")
 
@@ -209,6 +219,15 @@ async def execute_action(
                 result = await client.get_payroll_summary(params)
             else:
                 raise ValueError(f"Unknown ADP action: {action_name}")
+
+        # ── Tinyfish (GST Compliance) ────────────────────────
+        elif app_slug == "tinyfish":
+            if action_name == "verify_gstin":
+                result = await client.verify_gstin(params)
+            elif action_name == "validate_tax_breakup":
+                result = await client.validate_tax_breakup(params)
+            else:
+                raise ValueError(f"Unknown Tinyfish action: {action_name}")
 
         else:
             raise ValueError(f"Unknown app: {app_slug}")

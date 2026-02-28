@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.user import User, UserCriteria
 from services.gemini import generate_chat_response
-from services.rag.search import vector_search
+from services.rag.search import vector_search, chat_history_search
 
 
 def _build_system_prompt(title: str | None) -> str:
@@ -51,6 +51,27 @@ def _build_context(results: list[dict]) -> str:
         context += "\n\n".join(article["chunks"])
         context += "\n\n"
     return context
+
+
+def _build_chat_context(results: list[dict]) -> str:
+    if not results:
+        return ""
+
+    # Group by session title
+    sessions: dict[str, list[dict]] = {}
+    for r in results:
+        title = r.get("sessionTitle") or "Untitled"
+        sessions.setdefault(title, []).append(r)
+
+    lines = ["Relevant Past Conversations:\n"]
+    for title, messages in sessions.items():
+        lines.append(f'--- Session: "{title}" ---')
+        for m in messages:
+            role_label = "User" if m["role"] == "user" else "Assistant"
+            lines.append(f"{role_label}: {m['content'][:500]}")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 async def resolve_user_access(db: AsyncSession, user_id: int) -> dict | None:
@@ -106,8 +127,20 @@ async def run_rag_pipeline(
         }
 
     context = _build_context(search_results)
+
+    # Search chat history for relevant past conversations
+    chat_context = ""
+    if query_embedding:
+        try:
+            chat_results = await chat_history_search(db, user_id, query_embedding)
+            chat_context = _build_chat_context(chat_results)
+            if chat_results:
+                print(f"[RAG] Chat history hits: {len(chat_results)}")
+        except Exception as e:
+            print(f"[RAG] Chat history search failed: {e}")
+
     system_prompt = _build_system_prompt(access.get("title"))
-    full_prompt = f"{context}\n\nUser Question: {query}"
+    full_prompt = f"{context}\n\n{chat_context}\n\nUser Question: {query}" if chat_context else f"{context}\n\nUser Question: {query}"
     t1 = time.time()
     response = await generate_chat_response(system_prompt, full_prompt, conversation_history)
     print(f"[RAG] LLM response: {time.time() - t1:.1f}s")

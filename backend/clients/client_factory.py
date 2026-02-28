@@ -16,6 +16,7 @@ from clients.confluence import ConfluenceClient
 from clients.freshworks import FreshWorksClient
 from clients.docusign import DocuSignClient
 from clients.adp import ADPClient
+from clients.tinyfish import TinyfishClient
 
 _client_cache: dict[str, Any] = {}
 
@@ -125,6 +126,10 @@ def get_client(app_slug: str, credentials: dict[str, Any]) -> Any:
             credentials["base_url"],
             credentials["client_id"],
             credentials["client_secret"],
+        )
+    elif app_slug == "tinyfish":
+        client = TinyfishClient(
+            credentials["api_key"],
         )
     # Legacy split AWS slugs — redirect to unified client
     elif app_slug in ("aws_ec2", "aws_s3"):

@@ -15,6 +15,10 @@ class SlackClient:
         }
 
     async def send_message(self, text: str, channel: str | None = None, blocks: list | None = None) -> dict:
+        # If the channel doesn't look like a Slack channel ID (starts with C/G/D),
+        # fall back to the configured default channel ID to avoid channel_not_found errors.
+        if channel and not channel.startswith(("C", "G", "D")):
+            channel = self.default_channel
         channel = channel or self.default_channel
         if not channel:
             raise ValueError("Channel must be provided or set as default")

@@ -58,3 +58,41 @@ async def vector_search(
 
     rows = result.mappings().all()
     return [dict(row) for row in rows]
+
+
+async def chat_history_search(
+    db: AsyncSession,
+    user_id: int,
+    query_embedding: list[float],
+    similarity_threshold: float = 0.45,
+    top_k: int = 5,
+) -> list[dict]:
+    """Search user's past chat messages by embedding similarity."""
+    embedding_str = json.dumps(query_embedding)
+
+    result = await db.execute(
+        text("""
+            SELECT
+                cm.id,
+                cm.role,
+                cm.content,
+                cs.title AS "sessionTitle",
+                1 - (cm.embedding <=> CAST(:embedding AS vector)) AS similarity
+            FROM chat_messages cm
+            JOIN chat_sessions cs ON cm.session_id = cs.id
+            WHERE cs.user_id = :user_id
+                AND cm.embedding IS NOT NULL
+                AND 1 - (cm.embedding <=> CAST(:embedding AS vector)) >= :threshold
+            ORDER BY similarity DESC
+            LIMIT :top_k
+        """),
+        {
+            "embedding": embedding_str,
+            "user_id": user_id,
+            "threshold": similarity_threshold,
+            "top_k": top_k,
+        },
+    )
+
+    rows = result.mappings().all()
+    return [dict(row) for row in rows]

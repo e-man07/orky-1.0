@@ -18,9 +18,10 @@ from google.genai import types
 from models.app import App, AppAction
 from models.user import User
 from models.workflow import Workflow, WorkflowAgent, WorkflowExecution, StepExecution
-from services.gemini import generate_with_tools, generate_with_tools_chat, generate_chat_response
+from services.gemini import generate_with_tools, generate_with_tools_chat, generate_chat_response, generate_embedding
 from services.action_executor import execute_action
-from services.workflow_engine import run_workflow
+from services.workflow_engine import run_workflow, resume_workflow
+from services.rag.search import chat_history_search
 
 
 @dataclass
@@ -39,6 +40,23 @@ class OrchestratorResult:
     actions_taken: list[ActionTaken] = field(default_factory=list)
     error: str | None = None
     workflow_execution_id: int | None = None
+
+
+async def _get_chat_context(db: AsyncSession, user_id: int, message: str) -> str:
+    """Retrieve relevant past chat messages for context."""
+    try:
+        query_embedding = await generate_embedding(message, "RETRIEVAL_QUERY")
+        results = await chat_history_search(db, user_id, query_embedding)
+        if not results:
+            return ""
+        lines = ["Relevant context from past conversations:"]
+        for r in results:
+            role_label = "User" if r["role"] == "user" else "Assistant"
+            lines.append(f"  [{r.get('sessionTitle', 'Untitled')}] {role_label}: {r['content'][:500]}")
+        return "\n".join(lines)
+    except Exception as e:
+        print(f"[ORCHESTRATOR] Chat history lookup failed: {e}")
+        return ""
 
 
 async def _load_configured_apps(db: AsyncSession) -> list[App]:
@@ -143,6 +161,9 @@ async def execute_chat_actions(
             response="No actions are available at the moment. Please configure app integrations on the **Apps** page."
         )
 
+    # Fetch relevant past chat context
+    chat_context = await _get_chat_context(db, user.id, message)
+
     # Build system prompt
     app_names = ", ".join(sorted(set(app.name for app in apps)))
     system_prompt = f"""You are ORKY, an AI assistant for enterprise employees. The user wants you to perform an action.
@@ -163,6 +184,9 @@ User info:
 - Email: {user.email}
 - Department: {user.department or "N/A"}
 - Title: {user.title or "N/A"}"""
+
+    if chat_context:
+        system_prompt += f"\n\n{chat_context}"
 
     tools = [types.Tool(function_declarations=declarations)]
     actions_taken: list[ActionTaken] = []
@@ -278,6 +302,33 @@ User info:
         )
 
 
+async def workflow_requires_file(db: AsyncSession, workflow: Workflow) -> bool:
+    """Check if any agent in the workflow uses actions that need a file (s3_bucket/s3_key params)."""
+    from models.agent import Agent, AgentAction
+    from models.app import AppAction
+
+    # Load all agent IDs in this workflow
+    agent_ids = [wa.agent_id for wa in workflow.agents]
+    if not agent_ids:
+        return False
+
+    # Load the actions assigned to these agents
+    result = await db.execute(
+        select(AppAction)
+        .join(AgentAction, AgentAction.action_id == AppAction.id)
+        .where(AgentAction.agent_id.in_(agent_ids))
+    )
+    actions = result.scalars().all()
+
+    for action in actions:
+        schema = action.input_schema or {}
+        props = schema.get("properties", {})
+        if "s3_bucket" in props or "s3_key" in props:
+            return True
+
+    return False
+
+
 async def match_workflow(db: AsyncSession, user: User, message: str) -> Workflow | None:
     """Check if user message matches any of the user's active workflows."""
     result = await db.execute(
@@ -321,37 +372,32 @@ async def match_workflow(db: AsyncSession, user: User, message: str) -> Workflow
         return None
 
 
-async def execute_workflow_from_chat(
-    db: AsyncSession, user: User, workflow: Workflow, message: str
-) -> OrchestratorResult:
-    """Trigger a workflow from chat, run synchronously, return results."""
-    # Create execution record
-    execution = WorkflowExecution(
-        workflow_id=workflow.id,
-        user_id=user.id,
-        status="pending",
-        trigger_input=message,
-        variables={},
-    )
-    db.add(execution)
-    await db.commit()
-    await db.refresh(execution)
+async def generate_workflow_summary(
+    db: AsyncSession,
+    execution_id: int,
+    workflow_name: str,
+    workflow_description: str | None,
+    execution_status: str,
+    message: str,
+    user_id: int,
+    conversation_history: list[dict] | None = None,
+) -> tuple[str, list[ActionTaken]]:
+    """Generate a Gemini-powered summary for a completed workflow execution.
 
-    # Run the workflow (synchronous — awaited)
-    await run_workflow(execution.id)
+    Returns (response_text, actions_taken) tuple.
+    """
+    import json as _json
 
-    # Reload execution with step results (include agent names)
-    await db.refresh(execution)
+    # Load step results with agent names
     step_result = await db.execute(
         select(StepExecution)
-        .where(StepExecution.workflow_execution_id == execution.id)
+        .where(StepExecution.workflow_execution_id == execution_id)
         .options(selectinload(StepExecution.workflow_agent).selectinload(WorkflowAgent.agent))
         .order_by(StepExecution.step_order)
     )
     steps = step_result.scalars().all()
 
-    # Collect raw step data for Gemini summarization
-    actions_taken = []
+    actions_taken: list[ActionTaken] = []
     step_summaries = []
 
     for step in steps:
@@ -383,20 +429,19 @@ async def execute_workflow_from_chat(
                     error=step.error_message,
                 ))
 
-        # Include result data (e.g. ticket numbers, instance IDs)
         if step.result and isinstance(step.result, dict):
             step_info["result"] = step.result
 
         step_summaries.append(step_info)
 
-    # Use Gemini to generate a friendly, detailed summary
-    import json as _json
+    chat_context = await _get_chat_context(db, user_id, message)
+
     summary_prompt = (
         f'You are ORKY, an AI assistant. A workflow just finished running. '
         f'Summarize the results for the user in a clear, friendly way.\n\n'
-        f'Workflow: {workflow.name}\n'
-        f'Description: {workflow.description or "N/A"}\n'
-        f'Overall status: {execution.status}\n'
+        f'Workflow: {workflow_name}\n'
+        f'Description: {workflow_description or "N/A"}\n'
+        f'Overall status: {execution_status}\n'
         f'User request: "{message}"\n\n'
         f'Step results:\n{_json.dumps(step_summaries, indent=2, default=str)}\n\n'
         f'Guidelines:\n'
@@ -408,19 +453,88 @@ async def execute_workflow_from_chat(
         f'- Do NOT show raw JSON or technical internals'
     )
 
+    if chat_context:
+        summary_prompt += f'\n\n{chat_context}'
+
     try:
         response_text = await generate_chat_response(
             "You are ORKY, a friendly AI assistant that summarizes workflow execution results.",
             summary_prompt,
+            conversation_history,
         )
     except Exception:
-        # Fallback to basic formatting if Gemini fails
-        lines = [f"**Workflow: {workflow.name}** — {execution.status}\n"]
+        lines = [f"**Workflow: {workflow_name}** — {execution_status}\n"]
         for s in step_summaries:
             lines.append(f"**Step {s['step']}** ({s['agent']}) — {s['status']}")
             if s.get("error"):
                 lines.append(f"  - Error: {s['error']}")
         response_text = "\n".join(lines)
+
+    return response_text, actions_taken
+
+
+async def execute_workflow_from_chat(
+    db: AsyncSession, user: User, workflow: Workflow, message: str,
+    conversation_history: list[dict] | None = None,
+) -> OrchestratorResult:
+    """Trigger a workflow from chat, run synchronously, return results."""
+    # Create execution record with user context injected
+    execution = WorkflowExecution(
+        workflow_id=workflow.id,
+        user_id=user.id,
+        status="pending",
+        trigger_input=message,
+        variables={
+            "_user": {
+                "name": user.name,
+                "email": user.email,
+                "department": user.department,
+                "title": user.title,
+            },
+        },
+    )
+    db.add(execution)
+    await db.commit()
+    await db.refresh(execution)
+
+    # Run the workflow (synchronous — awaited)
+    await run_workflow(execution.id)
+
+    # Reload execution to check status
+    await db.refresh(execution)
+
+    # If paused awaiting file upload, summarize completed pre-checks and prompt user
+    if execution.status == "awaiting_upload":
+        step_result = await db.execute(
+            select(StepExecution)
+            .where(StepExecution.workflow_execution_id == execution.id)
+            .options(selectinload(StepExecution.workflow_agent).selectinload(WorkflowAgent.agent))
+            .order_by(StepExecution.step_order)
+        )
+        completed_steps = step_result.scalars().all()
+
+        lines = [f"**{workflow.name}** — Pre-checks completed:\n"]
+        for step in completed_steps:
+            agent_name = step.workflow_agent.agent.name if step.workflow_agent and step.workflow_agent.agent else f"Step {step.step_order}"
+            lines.append(f"- **{agent_name}** — {step.status}")
+        lines.append("\nThe next step requires a file. Please attach your document using the 📎 button and send again to continue.")
+
+        return OrchestratorResult(
+            response="\n".join(lines),
+            workflow_execution_id=execution.id,
+        )
+
+    # Use the shared summary generator
+    response_text, actions_taken = await generate_workflow_summary(
+        db=db,
+        execution_id=execution.id,
+        workflow_name=workflow.name,
+        workflow_description=workflow.description,
+        execution_status=execution.status,
+        message=message,
+        user_id=user.id,
+        conversation_history=conversation_history,
+    )
 
     return OrchestratorResult(
         response=response_text,

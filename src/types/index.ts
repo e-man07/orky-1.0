@@ -41,12 +41,40 @@ export interface ActionTakenData {
   error: string | null
 }
 
+export interface FileAttachment {
+  s3_bucket: string
+  s3_key: string
+  filename: string
+}
+
+export type WorkflowStepStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+export interface WorkflowStepState {
+  step_order: number
+  agent_name: string
+  agent_icon: string | null
+  agent_color: string | null
+  status: WorkflowStepStatus
+  actions?: { app: string; action: string }[]
+  result_summary?: string | null
+  error?: string | null
+}
+
+export interface WorkflowProgressState {
+  workflow_name: string
+  steps: WorkflowStepState[]
+  isComplete: boolean
+  isPaused: boolean
+}
+
 export interface ChatMessageData {
   id: number
   role: MessageRole
   content: string
   sources?: SourceCitation[]
   actionsTaken?: ActionTakenData[]
+  fileAttachment?: FileAttachment
+  workflowProgress?: WorkflowProgressState
   createdAt: string
 }
 

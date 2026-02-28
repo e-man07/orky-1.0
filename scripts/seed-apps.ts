@@ -43,6 +43,10 @@ const apps = [
       { name: 'close_incident', displayName: 'Close Incident', description: 'Close a ServiceNow incident with resolution notes', actionType: 'rest_api', inputSchema: { type: 'object', properties: { sys_id: { type: 'string' }, close_notes: { type: 'string' } }, required: ['sys_id', 'close_notes'] } },
       { name: 'get_incident', displayName: 'Get Incident', description: 'Retrieve details of a specific ServiceNow incident', actionType: 'rest_api', inputSchema: { type: 'object', properties: { sys_id: { type: 'string' } }, required: ['sys_id'] } },
       { name: 'search_incidents', displayName: 'Search Incidents', description: 'Search for incidents using a query filter', actionType: 'rest_api', inputSchema: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } } } },
+      { name: 'create_ritm', displayName: 'Create RITM', description: 'Create a new Requested Item (RITM) in ServiceNow', actionType: 'rest_api', inputSchema: { type: 'object', properties: { short_description: { type: 'string' }, description: { type: 'string' }, cat_item: { type: 'string' }, assignment_group: { type: 'string' }, urgency: { type: 'string', enum: ['1', '2', '3'] } }, required: ['short_description'] } },
+      { name: 'close_ritm', displayName: 'Close RITM', description: 'Close a Requested Item (RITM) with resolution notes', actionType: 'rest_api', inputSchema: { type: 'object', properties: { sys_id: { type: 'string' }, close_notes: { type: 'string' } }, required: ['sys_id', 'close_notes'] } },
+      { name: 'get_user_record', displayName: 'Get User Record', description: 'Retrieve employee record from ServiceNow to verify employment type (FTE/contractor), active status, and department', actionType: 'rest_api', inputSchema: { type: 'object', properties: { employee_email: { type: 'string' } }, required: ['employee_email'] } },
+      { name: 'get_hr_profile', displayName: 'Get HR Profile', description: 'Fetch HR profile with designation, band, department, and monthly reimbursement limit for an employee', actionType: 'rest_api', inputSchema: { type: 'object', properties: { employee_email: { type: 'string' } }, required: ['employee_email'] } },
     ],
   },
   {
@@ -58,6 +62,9 @@ const apps = [
       { name: 'stop_instance', displayName: 'Stop EC2 Instance', description: 'Stop a running EC2 instance', actionType: 'rest_api', inputSchema: { type: 'object', properties: { instance_id: { type: 'string' } }, required: ['instance_id'] } },
       { name: 'list_s3_buckets', displayName: 'List S3 Buckets', description: 'List all S3 buckets in the account', actionType: 'rest_api', inputSchema: { type: 'object', properties: {} } },
       { name: 'put_s3_object', displayName: 'Upload to S3', description: 'Upload an object to an S3 bucket', actionType: 'rest_api', inputSchema: { type: 'object', properties: { bucket_name: { type: 'string' }, key: { type: 'string' }, body: { type: 'string' } }, required: ['bucket_name', 'key', 'body'] } },
+      { name: 'extract_invoice', displayName: 'Extract Invoice Data', description: 'Use AWS Textract AnalyzeExpense to extract structured data from an invoice (vendor name, GSTIN, invoice number, date, amounts, tax breakup, line items)', actionType: 'rest_api', inputSchema: { type: 'object', properties: { s3_bucket: { type: 'string' }, s3_key: { type: 'string' } }, required: ['s3_bucket', 's3_key'] } },
+      { name: 'validate_invoice', displayName: 'Validate Invoice', description: 'Validate extracted invoice data against employee details (name match, GSTIN format, date range, tax calculations)', actionType: 'rest_api', inputSchema: { type: 'object', properties: { invoice_data: { type: 'object' }, employee_name: { type: 'string' }, expected_billing_period: { type: 'string' } }, required: ['invoice_data', 'employee_name'] } },
+      { name: 'detect_document_text', displayName: 'Detect Document Text', description: 'Use AWS Textract to detect and extract raw text from a document for quality assessment', actionType: 'rest_api', inputSchema: { type: 'object', properties: { s3_bucket: { type: 'string' }, s3_key: { type: 'string' } }, required: ['s3_bucket', 's3_key'] } },
     ],
   },
   {
@@ -212,6 +219,18 @@ const apps = [
     actions: [
       { name: 'get_worker_details', displayName: 'Get Worker Details', description: 'Retrieve employee information from ADP', actionType: 'rest_api', inputSchema: { type: 'object', properties: { worker_id: { type: 'string' } }, required: ['worker_id'] } },
       { name: 'get_payroll_summary', displayName: 'Get Payroll Summary', description: 'Get payroll summary for a pay period', actionType: 'rest_api', inputSchema: { type: 'object', properties: { pay_period: { type: 'string' }, department: { type: 'string' } } } },
+    ],
+  },
+  {
+    name: 'Tinyfish',
+    slug: 'tinyfish',
+    description: 'AI-powered browser agent that navigates the GST portal to verify vendor GSTIN numbers and retrieve taxpayer details',
+    icon: 'Search',
+    logoUrl: '/logos/tinyfish-logo.png',
+    category: 'Compliance',
+    actions: [
+      { name: 'verify_gstin', displayName: 'Verify GSTIN', description: 'Browse the GST portal to verify a GSTIN number and retrieve vendor/taxpayer details (legal name, status, registration date, state, business type)', actionType: 'rest_api', inputSchema: { type: 'object', properties: { gstin: { type: 'string' } }, required: ['gstin'] } },
+      { name: 'validate_tax_breakup', displayName: 'Validate Tax Breakup', description: 'Verify that CGST/SGST/IGST amounts are correctly calculated based on applicable GST rates', actionType: 'rest_api', inputSchema: { type: 'object', properties: { subtotal: { type: 'number' }, cgst: { type: 'number' }, sgst: { type: 'number' }, igst: { type: 'number' }, total: { type: 'number' }, gst_rate: { type: 'number' } }, required: ['subtotal', 'cgst', 'sgst', 'igst', 'total', 'gst_rate'] } },
     ],
   },
 ]
