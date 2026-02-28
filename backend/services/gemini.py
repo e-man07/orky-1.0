@@ -30,13 +30,13 @@ async def generate_embedding(
     text: str,
     task_type: str = "RETRIEVAL_DOCUMENT",
 ) -> list[float]:
-    """Generate a 768-dim embedding for text."""
+    """Generate a 3072-dim embedding for text."""
     async def _call():
         result = await asyncio.to_thread(
             client.models.embed_content,
             model=EMBEDDING_MODEL,
             contents=text,
-            config=types.EmbedContentConfig(task_type=task_type, output_dimensionality=768),
+            config=types.EmbedContentConfig(task_type=task_type),
         )
         return result.embeddings[0].values
 

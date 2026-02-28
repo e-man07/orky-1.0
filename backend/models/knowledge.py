@@ -37,7 +37,7 @@ class ArticleChunk(Base):
     chunk_size = Column(Integer, nullable=False)
     preceding_context = Column(Text, nullable=True)
     following_context = Column(Text, nullable=True)
-    embedding = Column(Vector(768), nullable=True)
+    embedding = Column(Vector(3072), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     article = relationship("KnowledgeArticle", back_populates="chunks")
@@ -74,7 +74,7 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     sources = Column(JSON, nullable=True)
-    embedding = Column(Vector(768), nullable=True)
+    embedding = Column(Vector(3072), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     session = relationship("ChatSession", back_populates="messages")
