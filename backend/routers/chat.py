@@ -43,22 +43,28 @@ BAND_LIMITS = {
 
 async def _generate_confirmation_message(user: User, workflow: Workflow) -> str:
     """Generate a confirmation message for a matched workflow using Gemini."""
-    band_info = BAND_LIMITS.get(user.title or "", {})
-    band_label = band_info.get("band", "N/A")
-    monthly_limit = band_info.get("monthly_mobile_limit")
+    # Strip internal terms from the workflow name for user-facing messages
+    friendly_name = (workflow.name or "").replace(" Automation", "").replace(" automation", "")
+
+    # Only include band/allowance info for reimbursement-related workflows
+    is_reimbursement = "reimburs" in (workflow.name or "").lower()
 
     user_context = (
         f"User: {user.name}\n"
         f"Title: {user.title or 'N/A'}\n"
         f"Department: {user.department or 'N/A'}\n"
     )
-    if band_label != "N/A":
-        user_context += f"Band: {band_label}\n"
-    if monthly_limit:
-        user_context += f"Monthly mobile allowance: ₹{monthly_limit:,}\n"
 
-    # Strip internal terms from the workflow name for user-facing messages
-    friendly_name = (workflow.name or "").replace(" Automation", "").replace(" automation", "")
+    band_hint = ""
+    if is_reimbursement:
+        band_info = BAND_LIMITS.get(user.title or "", {})
+        band_label = band_info.get("band", "N/A")
+        monthly_limit = band_info.get("monthly_mobile_limit")
+        if band_label != "N/A":
+            user_context += f"Band: {band_label}\n"
+        if monthly_limit:
+            user_context += f"Monthly mobile allowance: ₹{monthly_limit:,}\n"
+            band_hint = f"- Mention the band and allowance naturally (e.g., 'As a {user.title} (Band {band_label}), your monthly mobile allowance is ₹{monthly_limit:,}.')\n"
 
     prompt = (
         f"You are ORKY, an AI assistant. The user wants to submit a request related to: \"{friendly_name}\".\n"
@@ -68,12 +74,12 @@ async def _generate_confirmation_message(user: User, workflow: Workflow) -> str:
         f"Description: {workflow.description or 'N/A'}\n\n"
         f"Guidelines:\n"
         f"- Greet the user by first name\n"
-        f"- If there's band/allowance info, mention it naturally (e.g., 'As a {user.title} (Band {band_label}), your monthly mobile allowance is ₹{monthly_limit:,}.')\n"
+        f"{band_hint}"
         f"- Ask if they'd like to proceed\n"
         f"- Keep it concise and friendly\n"
         f"- Do NOT use markdown or bullet points, just a short conversational message\n"
         f"- Do NOT mention 'automation', 'workflow', 'agentic', 'agents', or any internal system terms\n"
-        f"- Talk about it as a simple request or process, e.g., 'Would you like to proceed with your mobile reimbursement?'"
+        f"- Do NOT mention mobile allowance or reimbursement limits unless this is a reimbursement request"
     )
 
     try:
@@ -83,13 +89,7 @@ async def _generate_confirmation_message(user: User, workflow: Workflow) -> str:
         )
     except Exception:
         # Fallback if Gemini fails
-        if monthly_limit:
-            return (
-                f"Hi {(user.name or 'there').split()[0]}! As a {user.title} (Band {band_label}), "
-                f"your monthly mobile allowance is ₹{monthly_limit:,}. "
-                f"Would you like to proceed with your {friendly_name.lower()}?"
-            )
-        return f"I can help you with your {friendly_name.lower()}. Would you like to proceed?"
+        return f"Hi {(user.name or 'there').split()[0]}! I can help you with your {friendly_name.lower()}. Would you like to proceed?"
 
 
 async def _classify_confirmation(message: str) -> bool:
@@ -508,8 +508,12 @@ async def stream_chat_message(
             )
             confirmed_workflow = wf_result.scalar_one_or_none()
 
+            # Retrieve the original message that triggered the workflow
+            original_trigger_input = chat_session.pending_workflow_input or augmented_message
+
             # Clear the pending state
             chat_session.pending_workflow_id = None
+            chat_session.pending_workflow_input = None
             await db.flush()
 
             if confirmed_workflow:
@@ -518,7 +522,7 @@ async def stream_chat_message(
                     workflow_id=confirmed_workflow.id,
                     user_id=user.id,
                     status="pending",
-                    trigger_input=augmented_message,
+                    trigger_input=original_trigger_input,
                     variables={
                         "_user": {
                             "name": user.name,
@@ -610,6 +614,7 @@ async def stream_chat_message(
 
         # User declined or workflow not found — clear pending state and respond normally
         chat_session.pending_workflow_id = None
+        chat_session.pending_workflow_input = None
         response_text = "No problem! Let me know if there's anything else I can help with."
         execution.conversational_response = response_text
         execution.status = "conversational"
@@ -725,6 +730,7 @@ async def stream_chat_message(
         # Store pending workflow on the session
         if chat_session:
             chat_session.pending_workflow_id = matched_workflow.id
+            chat_session.pending_workflow_input = augmented_message
 
         execution.conversational_response = confirmation_msg
         execution.status = "conversational"

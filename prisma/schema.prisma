@@ -138,8 +138,9 @@ model ChatSession {
   id                Int      @id @default(autoincrement())
   userId            Int      @map("user_id")
   title             String   @default("New Chat")
-  pendingWorkflowId Int?     @map("pending_workflow_id")
-  createdAt         DateTime @default(now()) @map("created_at")
+  pendingWorkflowId    Int?     @map("pending_workflow_id")
+  pendingWorkflowInput String?  @map("pending_workflow_input") @db.Text
+  createdAt            DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   user              User          @relation(fields: [userId], references: [id])
