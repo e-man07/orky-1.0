@@ -50,7 +50,7 @@ export default function HomePage() {
       >
         <div className="relative">
           <span className="text-2xl font-bold tracking-tight text-logo-blue">
-            ORKY
+            Orky.io
           </span>
           <div className="absolute inset-0 blur-2xl bg-logo-blue/10 -z-10 scale-150" />
         </div>
