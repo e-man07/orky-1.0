@@ -9,7 +9,7 @@ import { ChatInput } from '@/components/ChatInput'
 import { ExecutionMessage } from '@/components/ExecutionMessage'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Sparkles, BookOpen, Zap } from 'lucide-react'
+import { Bot } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import type {
   ChatMessageData,
@@ -27,12 +27,7 @@ interface PendingExecution {
   isAction?: boolean
 }
 
-const SUGGESTION_PROMPTS = [
-  { label: 'What is the holiday calendar?', icon: BookOpen, category: 'kb' },
-  { label: 'How do I request leave?', icon: BookOpen, category: 'kb' },
-  { label: 'Create a ServiceNow incident for server outage', icon: Zap, category: 'action' },
-  { label: 'Send a Slack message to the team about deployment', icon: Zap, category: 'action' },
-]
+const SUGGESTION_PROMPTS: { label: string; icon: typeof BookOpen; category: string }[] = []
 
 export default function ChatPage() {
   const { data: session, status: authStatus } = useSession()
@@ -193,10 +188,17 @@ export default function ChatPage() {
               workflowProgressRef.current = updated
               setWorkflowProgress({ ...updated })
             }
+          } else if (type === 'notification_sent') {
+            const prev = workflowProgressRef.current
+            if (prev) {
+              const updated = { ...prev, notificationSent: true }
+              workflowProgressRef.current = updated
+              setWorkflowProgress({ ...updated })
+            }
           } else if (type === 'workflow_paused') {
             const prev: WorkflowProgressState | null = workflowProgressRef.current
             if (prev) {
-              const updated: WorkflowProgressState = { ...prev, isPaused: true }
+              const updated: WorkflowProgressState = { ...prev, isPaused: true, pauseReason: data.reason || undefined }
               workflowProgressRef.current = updated
               setWorkflowProgress({ ...updated })
             }
@@ -281,6 +283,7 @@ export default function ChatPage() {
       <Sidebar
         userName={user?.name}
         userEmail={user?.email}
+        userImage={user?.image}
         userTitle={user?.title}
         userDepartment={user?.department}
         currentSessionId={sessionId}
@@ -297,7 +300,7 @@ export default function ChatPage() {
           className="flex h-13 items-center border-b border-white/[0.06] px-6 backdrop-blur-sm"
         >
           <div className="flex items-center gap-2">
-            <Sparkles className="h-3.5 w-3.5 text-logo-blue/60" />
+            <Bot className="h-4 w-4 text-logo-blue/60" />
             <span className="text-sm font-medium text-white/60">
               ORKY Assistant
             </span>
@@ -323,7 +326,7 @@ export default function ChatPage() {
                       transition={{ delay: 0.1, type: 'spring', stiffness: 200, damping: 15 }}
                       className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-logo-blue/[0.08]"
                     >
-                      <Sparkles className="h-7 w-7 text-logo-blue/50" />
+                      <Bot className="h-7 w-7 text-logo-blue/50" />
                       <div className="absolute inset-0 rounded-2xl animate-glow-pulse-sm" />
                     </motion.div>
                     <div>
@@ -384,6 +387,7 @@ export default function ChatPage() {
                 fileAttachment={msg.fileAttachment}
                 workflowProgress={msg.workflowProgress}
                 userName={user?.name}
+                userImage={user?.image}
                 timestamp={new Date(msg.createdAt).toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit',

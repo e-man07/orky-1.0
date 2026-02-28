@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Loader2, Circle, X, AlertTriangle, Paperclip } from 'lucide-react'
+import { Check, Loader2, Circle, X, AlertTriangle, Paperclip, Mail } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Bot } from 'lucide-react'
 import { motion } from 'motion/react'
@@ -185,16 +185,31 @@ export function WorkflowProgress({ progress }: WorkflowProgressProps) {
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-medium text-amber-400/90">
-                    Document Required
+                    {progress.pauseReason ? 'Document Rejected' : 'Document Required'}
                   </span>
                   <span className="text-[10px] text-amber-400/60 leading-relaxed">
-                    The next step needs an invoice/document. Use the{' '}
+                    {progress.pauseReason || 'The next step needs an invoice/document.'}{' '}
+                    Use the{' '}
                     <span className="inline-flex items-center gap-0.5 text-amber-400/80 font-medium">
                       <Paperclip className="h-2.5 w-2.5" /> attach
                     </span>{' '}
                     button below to upload your file, then send a message to continue.
                   </span>
                 </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Email notification indicator */}
+          {progress.isComplete && progress.notificationSent && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-2.5 pt-2.5 border-t border-white/[0.06]"
+            >
+              <div className="flex items-center gap-2 text-[10px] text-white/30">
+                <Mail className="h-3 w-3" />
+                <span>Completion email sent</span>
               </div>
             </motion.div>
           )}

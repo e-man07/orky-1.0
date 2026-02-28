@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Bot, User, Check, X, FileText, ChevronDown, Circle, Loader2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
@@ -29,6 +29,7 @@ interface ChatMessageProps {
   fileAttachment?: FileAttachment
   workflowProgress?: WorkflowProgressState
   userName?: string
+  userImage?: string | null
   timestamp?: string
 }
 
@@ -64,6 +65,7 @@ export function ChatMessage({
   fileAttachment,
   workflowProgress,
   userName,
+  userImage,
   timestamp,
 }: ChatMessageProps) {
   const [stepsExpanded, setStepsExpanded] = useState(false)
@@ -85,6 +87,7 @@ export function ChatMessage({
         transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
       >
         <Avatar className="h-7 w-7 shrink-0">
+          {!isAssistant && userImage && <AvatarImage src={userImage} alt={userName || 'User'} />}
           <AvatarFallback
             className={
               isAssistant

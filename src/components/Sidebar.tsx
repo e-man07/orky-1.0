@@ -16,7 +16,7 @@ import {
   GitBranch,
 } from 'lucide-react'
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { UserBadge } from './UserBadge'
 
@@ -29,6 +29,7 @@ interface ChatHistoryItem {
 interface SidebarProps {
   userName?: string | null
   userEmail?: string | null
+  userImage?: string | null
   userTitle?: string | null
   userDepartment?: string | null
   currentSessionId?: number | null
@@ -39,6 +40,7 @@ interface SidebarProps {
 export function Sidebar({
   userName,
   userEmail,
+  userImage,
   userTitle,
   userDepartment,
   currentSessionId,
@@ -92,21 +94,10 @@ export function Sidebar({
     >
       {/* Logo */}
       <div className="flex h-14 items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-2 overflow-hidden">
-          <span className="text-xl font-bold text-logo-blue shrink-0">O</span>
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: 0.15 }}
-                className="text-xl font-bold text-logo-blue overflow-hidden whitespace-nowrap"
-              >
-                rky.io
-              </motion.span>
-            )}
-          </AnimatePresence>
+        <div className="overflow-hidden">
+          <span className="text-xl font-bold text-logo-blue shrink-0 whitespace-nowrap">
+            {collapsed ? 'O' : 'Orky.io'}
+          </span>
         </div>
         <motion.button
           onClick={() => setCollapsed(!collapsed)}
@@ -243,6 +234,7 @@ export function Sidebar({
         <div className="p-2">
           <div className="flex items-center gap-3 rounded-lg glass-subtle px-3 py-2.5">
             <Avatar className="h-7 w-7 shrink-0">
+              {userImage && <AvatarImage src={userImage} alt={userName || 'User'} />}
               <AvatarFallback className="bg-logo-blue/10 text-logo-blue/70 text-[10px] font-medium">
                 {initials}
               </AvatarFallback>

@@ -66,6 +66,8 @@ export interface WorkflowProgressState {
   steps: WorkflowStepState[]
   isComplete: boolean
   isPaused: boolean
+  pauseReason?: string
+  notificationSent?: boolean
 }
 
 export interface ChatMessageData {

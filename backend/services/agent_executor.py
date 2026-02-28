@@ -22,6 +22,8 @@ class AgentExecutionResult:
     actions_invoked: list[dict] = field(default_factory=list)
     result: Any = None
     error: str | None = None
+    document_rejected: bool = False
+    rejection_reason: str | None = None
 
 
 async def execute_workflow_agent(
@@ -80,6 +82,31 @@ async def execute_workflow_agent(
             ) if gemini_properties else None,
         ))
 
+    # Inject _reject_document if this agent has file-requiring actions and a file is attached
+    has_file_actions = any(
+        "s3_bucket" in (a.input_schema.get("properties", {})) or "s3_key" in (a.input_schema.get("properties", {}))
+        for a in actions
+    )
+    if has_file_actions and variables.get("_file_attachment"):
+        function_declarations.append(types.FunctionDeclaration(
+            name="_reject_document",
+            description=(
+                "Call this if the attached document is invalid, unreadable, or doesn't match "
+                "what's needed for this task. Provide a clear, user-friendly reason explaining "
+                "what's wrong and what kind of document is expected."
+            ),
+            parameters=types.Schema(
+                type="OBJECT",
+                properties={
+                    "reason": types.Schema(
+                        type="STRING",
+                        description="Clear reason why the document was rejected and what the user should upload instead.",
+                    ),
+                },
+                required=["reason"],
+            ),
+        ))
+
     tools = [types.Tool(function_declarations=function_declarations)] if function_declarations else []
 
     try:
@@ -115,6 +142,16 @@ async def execute_workflow_agent(
                 fc = part.function_call
                 action_name = fc.name
                 action_args = dict(fc.args) if fc.args else {}
+
+                # Handle document rejection (synthetic function)
+                if action_name == "_reject_document":
+                    reason = action_args.get("reason", "The document was rejected.")
+                    return AgentExecutionResult(
+                        thinking=reason,
+                        actions_invoked=actions_invoked,
+                        document_rejected=True,
+                        rejection_reason=reason,
+                    )
 
                 # Find matching action
                 action_info = next((a for a in actions if a.action_name == action_name), None)

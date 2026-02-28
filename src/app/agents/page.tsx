@@ -72,6 +72,7 @@ export default function AgentsPage() {
       <Sidebar
         userName={user?.name}
         userEmail={user?.email}
+        userImage={user?.image}
         userTitle={user?.title}
         userDepartment={user?.department}
         currentSessionId={null}

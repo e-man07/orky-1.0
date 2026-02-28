@@ -1,3 +1,8 @@
+import os
+import re
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone
 from typing import Any, Callable, Awaitable
 
@@ -9,6 +14,7 @@ from database import async_session
 from models.workflow import Workflow, WorkflowExecution, WorkflowAgent, StepExecution
 from models.agent import Agent, AgentAction
 from models.app import AppAction, App
+from models.user import User
 from services.agent_executor import execute_workflow_agent, AgentActionInfo
 
 # Type alias for the optional event callback
@@ -52,6 +58,104 @@ def _get_agent_apps(wa: WorkflowAgent) -> list[dict[str, str]]:
         if app.slug not in seen:
             seen[app.slug] = app.name
     return [{"slug": s, "name": n} for s, n in seen.items()]
+
+
+async def _send_completion_email(
+    db: AsyncSession,
+    execution: WorkflowExecution,
+    workflow_name: str,
+    steps_summary: list[dict],
+    on_event: OnEvent,
+) -> None:
+    """Send a completion email via Gmail SMTP. Fails silently (never breaks workflow)."""
+    try:
+        smtp_server = os.getenv("SMTP_SERVER")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        smtp_username = os.getenv("SMTP_USERNAME")
+        smtp_password = os.getenv("SMTP_PASSWORD")
+        from_email = os.getenv("FROM_EMAIL")
+        if not all([smtp_server, smtp_username, smtp_password, from_email]):
+            return
+
+        # Load user
+        user_result = await db.execute(
+            select(User).where(User.id == execution.user_id)
+        )
+        user = user_result.scalar_one_or_none()
+        if not user or not user.email:
+            return
+
+        # Build step summary lines
+        step_lines = []
+        for s in steps_summary:
+            step_lines.append(f"  Step {s['step_order']}: {s['agent_name']} — Completed")
+        steps_text = "\n".join(step_lines) if step_lines else "  All steps completed."
+
+        body_text = (
+            f"Hi {user.name or 'there'},\n\n"
+            f"Your workflow \"{workflow_name}\" has completed successfully.\n\n"
+            f"Steps:\n{steps_text}\n\n"
+            f"You can view full details in ORKY.\n\n"
+            f"— ORKY Platform"
+        )
+
+        msg = MIMEMultipart()
+        msg["From"] = from_email
+        msg["To"] = user.email
+        msg["Subject"] = f"Workflow Completed: {workflow_name}"
+        msg.attach(MIMEText(body_text, "plain"))
+
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_username, smtp_password)
+            server.send_message(msg)
+
+        await _emit(on_event, "notification_sent", {
+            "type": "email",
+            "to": user.email,
+        })
+    except Exception as e:
+        print(f"[WORKFLOW] Failed to send completion email: {e}")
+
+
+async def _handle_document_rejection(
+    db: AsyncSession,
+    execution: WorkflowExecution,
+    step_exec: StepExecution,
+    wa: WorkflowAgent,
+    agent_result: Any,
+    variables: dict,
+    on_event: OnEvent,
+) -> bool:
+    """Handle document rejection. Returns True if handled (caller should return)."""
+    if not agent_result.document_rejected:
+        return False
+
+    step_exec.status = "failed"
+    step_exec.error_message = agent_result.rejection_reason
+    step_exec.agent_thinking = agent_result.thinking
+    step_exec.actions_invoked = agent_result.actions_invoked
+    step_exec.completed_at = datetime.now(timezone.utc)
+
+    # Clear stale file data for retry
+    variables.pop("_file_attachment", None)
+
+    # Strip appended file context from trigger input
+    if "_triggerInput" in variables:
+        variables["_triggerInput"] = re.sub(
+            r'\n\n\[Attached file:.*?\]$', '', variables["_triggerInput"], flags=re.DOTALL
+        )
+
+    execution.status = "awaiting_upload"
+    execution.current_step = wa.step_order
+    execution.variables = variables
+    await db.commit()
+
+    await _emit(on_event, "workflow_paused", {
+        "step_order": wa.step_order,
+        "reason": agent_result.rejection_reason,
+    })
+    return True
 
 
 async def run_workflow(execution_id: int, on_event: OnEvent = None) -> None:
@@ -179,6 +283,10 @@ async def run_workflow(execution_id: int, on_event: OnEvent = None) -> None:
                     variables=variables,
                 )
 
+                # Check for document rejection first (retryable)
+                if await _handle_document_rejection(db, execution, step_exec, wa, agent_result, variables, on_event):
+                    return
+
                 if agent_result.error:
                     step_exec.status = "failed"
                     step_exec.agent_thinking = agent_result.thinking
@@ -237,6 +345,13 @@ async def run_workflow(execution_id: int, on_event: OnEvent = None) -> None:
         execution.completed_at = datetime.now(timezone.utc)
         execution.variables = variables
         await db.commit()
+
+        # Send completion email
+        steps_summary = [
+            {"step_order": wa.step_order, "agent_name": wa.agent.name}
+            for wa in workflow_agents
+        ]
+        await _send_completion_email(db, execution, execution.workflow.name, steps_summary, on_event)
 
 
 async def resume_workflow(execution_id: int, file_attachment: dict, on_event: OnEvent = None) -> None:
@@ -365,6 +480,10 @@ async def resume_workflow(execution_id: int, file_attachment: dict, on_event: On
                     variables=variables,
                 )
 
+                # Check for document rejection first (retryable)
+                if await _handle_document_rejection(db, execution, step_exec, wa, agent_result, variables, on_event):
+                    return
+
                 if agent_result.error:
                     step_exec.status = "failed"
                     step_exec.agent_thinking = agent_result.thinking
@@ -421,3 +540,10 @@ async def resume_workflow(execution_id: int, file_attachment: dict, on_event: On
         execution.completed_at = datetime.now(timezone.utc)
         execution.variables = variables
         await db.commit()
+
+        # Send completion email
+        steps_summary = [
+            {"step_order": wa.step_order, "agent_name": wa.agent.name}
+            for wa in workflow_agents
+        ]
+        await _send_completion_email(db, execution, execution.workflow.name, steps_summary, on_event)
