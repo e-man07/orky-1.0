@@ -36,7 +36,7 @@ async def generate_embedding(
             client.models.embed_content,
             model=EMBEDDING_MODEL,
             contents=text,
-            config=types.EmbedContentConfig(task_type=task_type),
+            config=types.EmbedContentConfig(task_type=task_type, output_dimensionality=768),
         )
         return result.embeddings[0].values
 
