@@ -525,6 +525,8 @@ async def stream_chat_message(
                             "email": user.email,
                             "department": user.department,
                             "title": user.title,
+                            "monthly_mobile_limit": BAND_LIMITS.get(user.title or "", {}).get("monthly_mobile_limit"),
+                            "band": BAND_LIMITS.get(user.title or "", {}).get("band"),
                         },
                     },
                 )

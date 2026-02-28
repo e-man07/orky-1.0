@@ -480,6 +480,9 @@ async def execute_workflow_from_chat(
 ) -> OrchestratorResult:
     """Trigger a workflow from chat, run synchronously, return results."""
     # Create execution record with user context injected
+    from routers.chat import BAND_LIMITS
+    band_info = BAND_LIMITS.get(user.title or "", {})
+
     execution = WorkflowExecution(
         workflow_id=workflow.id,
         user_id=user.id,
@@ -491,6 +494,8 @@ async def execute_workflow_from_chat(
                 "email": user.email,
                 "department": user.department,
                 "title": user.title,
+                "monthly_mobile_limit": band_info.get("monthly_mobile_limit"),
+                "band": band_info.get("band"),
             },
         },
     )
