@@ -274,8 +274,16 @@ export function ChatMessage({
               : 'bg-logo-blue/[0.08] border border-logo-blue/[0.06] text-white/85'
           }`}
         >
-          <div className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-headings:text-white/90 prose-ul:my-1 prose-li:my-0.5 prose-strong:text-white/90 prose-code:text-logo-blue/80 prose-code:bg-white/[0.04] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs">
-            <ReactMarkdown>{content}</ReactMarkdown>
+          <div className="prose prose-invert prose-sm max-w-none prose-p:my-2.5 prose-headings:my-3 prose-headings:text-white/90 prose-ul:my-2 prose-li:my-0.5 prose-strong:text-white/90 prose-a:text-logo-blue prose-a:underline prose-a:underline-offset-2 hover:prose-a:text-logo-blue/80 prose-code:text-logo-blue/80 prose-code:bg-white/[0.04] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs">
+            <ReactMarkdown
+              components={{
+                a: ({ href, children }) => (
+                  <a href={href} target="_blank" rel="noopener noreferrer">
+                    {children}
+                  </a>
+                ),
+              }}
+            >{content}</ReactMarkdown>
           </div>
         </div>
 

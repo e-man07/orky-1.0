@@ -115,7 +115,7 @@ export default function AppsPage() {
               <h1 className="text-2xl font-bold text-white/85">Applications</h1>
             </div>
             <p className="text-sm text-white/40">
-              Configure app connections to enable actions for your AI agents
+              Connect your business applications so your AI agents can take action on your behalf.
             </p>
           </motion.div>
 

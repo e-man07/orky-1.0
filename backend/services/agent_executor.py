@@ -48,6 +48,14 @@ async def execute_workflow_agent(
         parts.append(f"\nContext from previous steps:\n{json.dumps(variables, indent=2)}")
     parts.append("\nYou have access to tools/actions. Use them to accomplish your task.")
     parts.append("After completing your task, provide a clear summary of what you did and the results.")
+    if variables.get("_file_attachment"):
+        parts.append(
+            "\nIMPORTANT: A document has been uploaded for this workflow. "
+            "If at any point you find the document is missing required information "
+            "(e.g. no GST/tax details on an invoice, missing vendor name, unreadable content, "
+            "invalid data), you MUST call _reject_document with a clear reason. "
+            "Do NOT proceed with made-up or zero values — reject the document instead."
+        )
     system_prompt = "\n".join(parts)
 
     # Convert actions to Gemini function declarations
@@ -82,25 +90,24 @@ async def execute_workflow_agent(
             ) if gemini_properties else None,
         ))
 
-    # Inject _reject_document if this agent has file-requiring actions and a file is attached
-    has_file_actions = any(
-        "s3_bucket" in (a.input_schema.get("properties", {})) or "s3_key" in (a.input_schema.get("properties", {}))
-        for a in actions
-    )
-    if has_file_actions and variables.get("_file_attachment"):
+    # Inject _reject_document for ANY agent when a file is attached in the workflow.
+    # This allows validation agents (e.g. GSTIN verification) to reject bad invoices,
+    # not just file-uploading agents.
+    if variables.get("_file_attachment"):
         function_declarations.append(types.FunctionDeclaration(
             name="_reject_document",
             description=(
-                "Call this if the attached document is invalid, unreadable, or doesn't match "
-                "what's needed for this task. Provide a clear, user-friendly reason explaining "
-                "what's wrong and what kind of document is expected."
+                "Call this if the uploaded document is invalid, missing required information "
+                "(e.g. missing GST number, missing vendor details, unreadable), or doesn't match "
+                "what's needed. This will pause the workflow and ask the user to upload a correct document. "
+                "Provide a clear, user-friendly reason explaining what's wrong."
             ),
             parameters=types.Schema(
                 type="OBJECT",
                 properties={
                     "reason": types.Schema(
                         type="STRING",
-                        description="Clear reason why the document was rejected and what the user should upload instead.",
+                        description="Clear reason why the document was rejected and what the user should fix or upload instead.",
                     ),
                 },
                 required=["reason"],

@@ -437,20 +437,21 @@ async def generate_workflow_summary(
     chat_context = await _get_chat_context(db, user_id, message)
 
     summary_prompt = (
-        f'You are ORKY, an AI assistant. A workflow just finished running. '
-        f'Summarize the results for the user in a clear, friendly way.\n\n'
+        f'You are ORKY, an AI assistant. A workflow just finished. '
+        f'Write a SHORT, friendly summary for the user.\n\n'
         f'Workflow: {workflow_name}\n'
-        f'Description: {workflow_description or "N/A"}\n'
-        f'Overall status: {execution_status}\n'
+        f'Status: {execution_status}\n'
         f'User request: "{message}"\n\n'
-        f'Step results:\n{_json.dumps(step_summaries, indent=2, default=str)}\n\n'
+        f'Step results (internal — do NOT expose to user):\n{_json.dumps(step_summaries, indent=2, default=str)}\n\n'
         f'Guidelines:\n'
-        f'- Show each step with the agent name and what it did\n'
-        f'- Highlight key outputs: ticket numbers, instance IDs, resource details\n'
-        f'- If a step failed, explain the error clearly\n'
-        f'- Use markdown formatting (bold for labels, bullet points for details)\n'
-        f'- Be concise but include all important details\n'
-        f'- Do NOT show raw JSON or technical internals'
+        f'- Write 2-3 short paragraphs MAX. Be concise like a chat message, not a report.\n'
+        f'- Do NOT list every step or agent name. The user does not need to know internal workflow details.\n'
+        f'- Do NOT mention "automation", "workflow", "agents", "steps", Slack channel IDs, sys_ids, or any internal identifiers.\n'
+        f'- DO mention key outcomes the user cares about: approval status, ticket numbers (e.g. INC0010005), amounts.\n'
+        f'- If there are any URLs (e.g. ServiceNow incident links), format them as markdown links: [INC0010005](https://...)\n'
+        f'- If a step failed, explain what went wrong in simple terms.\n'
+        f'- Use markdown: **bold** for key info, proper paragraph spacing with blank lines between paragraphs.\n'
+        f'- Tone: friendly, professional, like a helpful colleague giving you a quick update.'
     )
 
     if chat_context:
@@ -458,7 +459,7 @@ async def generate_workflow_summary(
 
     try:
         response_text = await generate_chat_response(
-            "You are ORKY, a friendly AI assistant that summarizes workflow execution results.",
+            "You are ORKY, a friendly AI assistant. Give short, clear updates. Never mention internal details like agent names, step numbers, automation, Slack channel IDs, or sys_ids. Use markdown for formatting with proper paragraph spacing.",
             summary_prompt,
             conversation_history,
         )
