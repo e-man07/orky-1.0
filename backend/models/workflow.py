@@ -34,6 +34,8 @@ class WorkflowAgent(Base):
     agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
     step_order = Column(Integer, nullable=False)
     task_prompt = Column(Text, nullable=True)
+    running_description = Column(Text, nullable=True)
+    completed_description = Column(Text, nullable=True)
 
     workflow = relationship("Workflow", back_populates="agents")
     agent = relationship("Agent", back_populates="workflow_agents")

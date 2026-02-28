@@ -135,14 +135,16 @@ model AgentLog {
 }
 
 model ChatSession {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  title     String   @default("New Chat")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                Int      @id @default(autoincrement())
+  userId            Int      @map("user_id")
+  title             String   @default("New Chat")
+  pendingWorkflowId Int?     @map("pending_workflow_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
-  user     User          @relation(fields: [userId], references: [id])
-  messages ChatMessage[]
+  user              User          @relation(fields: [userId], references: [id])
+  pendingWorkflow   Workflow?     @relation(fields: [pendingWorkflowId], references: [id], onDelete: SetNull)
+  messages          ChatMessage[]
 
   @@map("chat_sessions")
 }
@@ -243,18 +245,21 @@ model Workflow {
   status      String   @default("draft")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-  user        User     @relation(fields: [userId], references: [id])
-  agents      WorkflowAgent[]
-  executions  WorkflowExecution[]
+  user            User     @relation(fields: [userId], references: [id])
+  agents          WorkflowAgent[]
+  executions      WorkflowExecution[]
+  pendingSessions ChatSession[]
   @@map("workflows")
 }
 
 model WorkflowAgent {
-  id         Int  @id @default(autoincrement())
-  workflowId Int  @map("workflow_id")
-  agentId    Int  @map("agent_id")
-  stepOrder  Int  @map("step_order")
-  taskPrompt String? @map("task_prompt") @db.Text
+  id                   Int     @id @default(autoincrement())
+  workflowId           Int     @map("workflow_id")
+  agentId              Int     @map("agent_id")
+  stepOrder            Int     @map("step_order")
+  taskPrompt           String? @map("task_prompt") @db.Text
+  runningDescription   String? @map("running_description") @db.Text
+  completedDescription String? @map("completed_description") @db.Text
   workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   agent      Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
   stepExecutions StepExecution[]

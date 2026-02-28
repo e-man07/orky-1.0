@@ -131,6 +131,8 @@ export default function ChatPage() {
                 agent_color: s.agent_color || null,
                 apps: s.apps || [],
                 status: 'pending' as const,
+                running_description: s.running_description || null,
+                completed_description: s.completed_description || null,
               })
             )
             const newProgress: WorkflowProgressState = {
@@ -167,6 +169,7 @@ export default function ChatPage() {
                         status: 'completed' as const,
                         actions: data.actions || [],
                         result_summary: data.result_summary || null,
+                        completed_description: data.description || s.completed_description,
                       }
                     : s
                 ),
@@ -198,7 +201,7 @@ export default function ChatPage() {
           } else if (type === 'workflow_paused') {
             const prev: WorkflowProgressState | null = workflowProgressRef.current
             if (prev) {
-              const updated: WorkflowProgressState = { ...prev, isPaused: true, pauseReason: data.reason || undefined }
+              const updated: WorkflowProgressState = { ...prev, isPaused: true, pauseReason: data.reason || undefined, pauseRejected: data.rejected || false }
               workflowProgressRef.current = updated
               setWorkflowProgress({ ...updated })
             }

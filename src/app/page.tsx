@@ -3,7 +3,7 @@
 import { signIn, useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, GitBranch, Bot, Zap } from 'lucide-react'
 import { motion } from 'motion/react'
 
 const stats = [
@@ -49,10 +49,11 @@ export default function HomePage() {
         className="relative z-10 flex items-center justify-between px-8 lg:px-16 py-6"
       >
         <div className="relative">
-          <span className="text-2xl font-bold tracking-tight text-logo-blue">
-            Orky.io
-          </span>
-          <div className="absolute inset-0 blur-2xl bg-logo-blue/10 -z-10 scale-150" />
+          <img
+            src="/logos/orky-logo.png"
+            alt="ORKY"
+            className="h-10 object-contain"
+          />
         </div>
         <motion.button
           whileHover={{ scale: 1.02 }}
@@ -94,17 +95,31 @@ export default function HomePage() {
               <span className="text-logo-blue">Enterprise</span>
             </motion.h1>
 
-            <motion.p
+            <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.25 }}
-              className="text-base lg:text-lg text-white/40 leading-relaxed max-w-lg mb-10"
+              className="text-sm lg:text-base text-white/40 leading-relaxed max-w-lg mb-10 space-y-3"
             >
-              Instead of knowledge living in disconnected systems — HR, IT,
-              CRM, compliance — Orky connects them into one unified brain.
-              It understands who you are, your role, your department, and your
-              access level — and filters information in real time.
-            </motion.p>
+              <p>
+                Breaking silos, connecting knowledge sources, and enabling
+                real-time, role-based access powered by AI agents.
+              </p>
+              <ul className="space-y-1.5 text-white/30 text-[13px] lg:text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-logo-blue mt-1 shrink-0">&#9670;</span>
+                  Specialized agents handle specific stages of the agentic workflow.
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-logo-blue mt-1 shrink-0">&#9670;</span>
+                  Reasonable cost with SLMs.
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-logo-blue mt-1 shrink-0">&#9670;</span>
+                  Unified intelligent layer across enterprise applications and data.
+                </li>
+              </ul>
+            </motion.div>
 
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -202,6 +217,85 @@ export default function HomePage() {
               </p>
             </div>
           </div>
+        </div>
+      </motion.div>
+
+      {/* How It Works — Workflows, Agents, Actions */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.65 }}
+        className="relative z-10 px-8 lg:px-16 mt-12 lg:mt-16 max-w-[1280px]"
+      >
+        <div className="mb-8">
+          <span className="text-[10px] font-mono text-white/25 tracking-wider uppercase">How It Works</span>
+          <h3 className="text-lg font-semibold text-white/80 mt-1">Build, Deploy, Execute</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Workflows */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.7 }}
+            className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 hover:border-white/[0.1] hover:bg-white/[0.03] transition-all duration-300"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-logo-blue/[0.08] text-logo-blue/70 group-hover:bg-logo-blue/[0.12] group-hover:text-logo-blue transition-colors duration-300 mb-4">
+              <GitBranch className="h-5 w-5" />
+            </div>
+            <div className="text-sm font-medium text-white/80 mb-2">Multi-Step Workflows</div>
+            <p className="text-xs text-white/35 leading-relaxed mb-3">
+              Define end-to-end business processes that chain multiple agents together. Each workflow runs sequentially with real-time progress streaming and automatic email notifications.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/[0.06] text-white/25">EC2 Provisioning</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/[0.06] text-white/25">Reimbursement</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/[0.06] text-white/25">Onboarding</span>
+            </div>
+          </motion.div>
+
+          {/* Agents */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.78 }}
+            className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 hover:border-white/[0.1] hover:bg-white/[0.03] transition-all duration-300"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-logo-blue/[0.08] text-logo-blue/70 group-hover:bg-logo-blue/[0.12] group-hover:text-logo-blue transition-colors duration-300 mb-4">
+              <Bot className="h-5 w-5" />
+            </div>
+            <div className="text-sm font-medium text-white/80 mb-2">Specialized AI Agents</div>
+            <p className="text-xs text-white/35 leading-relaxed mb-3">
+              Create purpose-built agents with specific roles, instructions, and assigned app actions. Each agent handles one stage of the workflow using Gemini function calling.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/[0.06] text-white/25">Custom Roles</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/[0.06] text-white/25">Function Calling</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/[0.06] text-white/25">Variable Passing</span>
+            </div>
+          </motion.div>
+
+          {/* Actions */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.86 }}
+            className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 hover:border-white/[0.1] hover:bg-white/[0.03] transition-all duration-300"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-logo-blue/[0.08] text-logo-blue/70 group-hover:bg-logo-blue/[0.12] group-hover:text-logo-blue transition-colors duration-300 mb-4">
+              <Zap className="h-5 w-5" />
+            </div>
+            <div className="text-sm font-medium text-white/80 mb-2">500+ App Actions</div>
+            <p className="text-xs text-white/35 leading-relaxed mb-3">
+              Connect 70+ enterprise apps and assign their actions to agents. Create incidents, send messages, provision infrastructure, extract invoices — all from chat.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/[0.06] text-white/25">ServiceNow</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/[0.06] text-white/25">AWS</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/[0.06] text-white/25">Jira</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/[0.06] text-white/25">Slack</span>
+            </div>
+          </motion.div>
         </div>
       </motion.div>
 

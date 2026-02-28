@@ -230,7 +230,9 @@ export function ChatMessage({
                                   : 'text-white/25'
                             }
                           >
-                            {step.agent_name}
+                            {step.status === 'completed' && step.completed_description
+                              ? step.completed_description
+                              : step.running_description || step.agent_name}
                           </span>
                           {/* App logos */}
                           {step.apps && step.apps.length > 0 && (

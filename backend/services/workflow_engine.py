@@ -1,4 +1,6 @@
+import asyncio
 import os
+import random
 import re
 import smtplib
 from email.mime.text import MIMEText
@@ -214,6 +216,7 @@ async def _handle_document_rejection(
     await _emit(on_event, "workflow_paused", {
         "step_order": wa.step_order,
         "reason": agent_result.rejection_reason,
+        "rejected": True,
     })
     return True
 
@@ -269,6 +272,8 @@ async def run_workflow(execution_id: int, on_event: OnEvent = None) -> None:
                     "agent_icon": wa.agent.icon,
                     "agent_color": wa.agent.color,
                     "apps": _get_agent_apps(wa),
+                    "running_description": wa.running_description,
+                    "completed_description": wa.completed_description,
                 }
                 for wa in workflow_agents
             ],
@@ -288,6 +293,7 @@ async def run_workflow(execution_id: int, on_event: OnEvent = None) -> None:
                 await _emit(on_event, "workflow_paused", {
                     "step_order": wa.step_order,
                     "reason": "File upload required for this step.",
+                    "rejected": False,
                 })
                 return
 
@@ -295,6 +301,7 @@ async def run_workflow(execution_id: int, on_event: OnEvent = None) -> None:
             await _emit(on_event, "step_started", {
                 "step_order": wa.step_order,
                 "agent_name": wa.agent.name,
+                "description": wa.running_description,
             })
 
             # Create step execution
@@ -378,11 +385,15 @@ async def run_workflow(execution_id: int, on_event: OnEvent = None) -> None:
                 execution.variables = variables
                 await db.commit()
 
+                # Pacing delay so users can follow progress
+                await asyncio.sleep(random.uniform(5, 8))
+
                 await _emit(on_event, "step_completed", {
                     "step_order": wa.step_order,
                     "agent_name": wa.agent.name,
                     "actions": _build_actions_summary(agent_result.actions_invoked),
                     "result_summary": None,
+                    "description": wa.completed_description,
                 })
 
             except Exception as e:
@@ -486,6 +497,8 @@ async def resume_workflow(execution_id: int, file_attachment: dict, on_event: On
                     "agent_icon": wa.agent.icon,
                     "agent_color": wa.agent.color,
                     "apps": _get_agent_apps(wa),
+                    "running_description": wa.running_description,
+                    "completed_description": wa.completed_description,
                 }
                 for wa in remaining_agents
             ],
@@ -496,6 +509,7 @@ async def resume_workflow(execution_id: int, file_attachment: dict, on_event: On
             await _emit(on_event, "step_started", {
                 "step_order": wa.step_order,
                 "agent_name": wa.agent.name,
+                "description": wa.running_description,
             })
 
             # Create step execution
@@ -573,11 +587,15 @@ async def resume_workflow(execution_id: int, file_attachment: dict, on_event: On
                 execution.variables = variables
                 await db.commit()
 
+                # Pacing delay so users can follow progress
+                await asyncio.sleep(random.uniform(5, 8))
+
                 await _emit(on_event, "step_completed", {
                     "step_order": wa.step_order,
                     "agent_name": wa.agent.name,
                     "actions": _build_actions_summary(agent_result.actions_invoked),
                     "result_summary": None,
+                    "description": wa.completed_description,
                 })
 
             except Exception as e:

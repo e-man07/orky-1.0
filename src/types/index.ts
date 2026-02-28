@@ -59,6 +59,8 @@ export interface WorkflowStepState {
   actions?: { app: string; action: string }[]
   result_summary?: string | null
   error?: string | null
+  running_description?: string | null
+  completed_description?: string | null
 }
 
 export interface WorkflowProgressState {
@@ -67,6 +69,7 @@ export interface WorkflowProgressState {
   isComplete: boolean
   isPaused: boolean
   pauseReason?: string
+  pauseRejected?: boolean
   notificationSent?: boolean
 }
 

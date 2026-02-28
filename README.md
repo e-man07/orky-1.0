@@ -525,6 +525,11 @@ Google Workspace, GitHub, GitLab, Datadog, PagerDuty, Splunk, Terraform, Jenkins
 
 ## Team
 
-Built by **MarTech Mate** for the ORKY Hackathon.
+**Gray Matter Crew**
+
+- Aman Kumar Jha
+- Rahul Jain
+- Charugupta MR
+- Animesh Jain
 
 Powered by Google Gemini.

@@ -95,9 +95,11 @@ export function Sidebar({
       {/* Logo */}
       <div className="flex h-14 items-center justify-between px-4 shrink-0">
         <div className="overflow-hidden">
-          <span className="text-xl font-bold text-logo-blue shrink-0 whitespace-nowrap">
-            {collapsed ? 'O' : 'Orky.io'}
-          </span>
+          <img
+            src="/logos/orky-logo.png"
+            alt="ORKY"
+            className={`object-contain shrink-0 transition-all duration-200 ${collapsed ? 'h-7 w-7' : 'h-8'}`}
+          />
         </div>
         <motion.button
           onClick={() => setCollapsed(!collapsed)}

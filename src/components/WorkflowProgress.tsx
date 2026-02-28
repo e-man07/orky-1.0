@@ -83,7 +83,7 @@ function StepRow({ step, index }: { step: WorkflowStepState; index: number }) {
 
       {/* Content */}
       <div className="flex flex-col gap-1 min-w-0">
-        {/* Agent name */}
+        {/* Step description (or agent name fallback) */}
         <span
           className={`text-xs leading-tight transition-colors duration-200 ${
             isCompleted
@@ -95,7 +95,13 @@ function StepRow({ step, index }: { step: WorkflowStepState; index: number }) {
                   : 'text-white/20'
           }`}
         >
-          {step.agent_name}
+          {isCompleted && step.completed_description
+            ? step.completed_description
+            : isRunning && step.running_description
+              ? step.running_description
+              : isPending && step.running_description
+                ? step.running_description
+                : step.agent_name}
         </span>
 
         {/* App logos row */}
@@ -185,10 +191,12 @@ export function WorkflowProgress({ progress }: WorkflowProgressProps) {
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-medium text-amber-400/90">
-                    {progress.pauseReason ? 'Document Rejected' : 'Document Required'}
+                    {progress.pauseRejected ? 'Document Rejected' : 'Document Required'}
                   </span>
                   <span className="text-[10px] text-amber-400/60 leading-relaxed">
-                    {progress.pauseReason || 'The next step needs an invoice/document.'}{' '}
+                    {progress.pauseRejected
+                      ? (progress.pauseReason || 'The document was rejected.')
+                      : 'The next step needs an invoice/document.'}{' '}
                     Use the{' '}
                     <span className="inline-flex items-center gap-0.5 text-amber-400/80 font-medium">
                       <Paperclip className="h-2.5 w-2.5" /> attach

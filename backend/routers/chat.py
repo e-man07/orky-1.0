@@ -15,6 +15,7 @@ from models.app import App
 from models.knowledge import ChatSession, ChatMessage, Execution
 from schemas.app import ChatInput
 from services.gemini import classify_intent, generate_chat_response, generate_embedding
+from models.workflow import Workflow
 from services.rag.pipeline import run_rag_pipeline
 from services.chat_orchestrator import (
     execute_chat_actions, match_workflow, execute_workflow_from_chat,
@@ -24,6 +25,86 @@ from services.workflow_engine import run_workflow, resume_workflow
 from models.workflow import WorkflowExecution, StepExecution, WorkflowAgent
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+# Band limits for mobile reimbursement confirmation messages
+BAND_LIMITS = {
+    "Associate": {"band": "L1", "monthly_mobile_limit": 800},
+    "Senior Associate": {"band": "L2", "monthly_mobile_limit": 1000},
+    "Analyst": {"band": "L3", "monthly_mobile_limit": 1200},
+    "Senior Analyst": {"band": "L4", "monthly_mobile_limit": 1500},
+    "Lead": {"band": "L5", "monthly_mobile_limit": 2000},
+    "Manager": {"band": "L6", "monthly_mobile_limit": 2500},
+    "Senior Manager": {"band": "L7", "monthly_mobile_limit": 3000},
+    "Director": {"band": "L8", "monthly_mobile_limit": 4000},
+    "Vice President": {"band": "L9", "monthly_mobile_limit": 5000},
+    "Senior Vice President": {"band": "L10", "monthly_mobile_limit": 6000},
+}
+
+
+async def _generate_confirmation_message(user: User, workflow: Workflow) -> str:
+    """Generate a confirmation message for a matched workflow using Gemini."""
+    band_info = BAND_LIMITS.get(user.title or "", {})
+    band_label = band_info.get("band", "N/A")
+    monthly_limit = band_info.get("monthly_mobile_limit")
+
+    user_context = (
+        f"User: {user.name}\n"
+        f"Title: {user.title or 'N/A'}\n"
+        f"Department: {user.department or 'N/A'}\n"
+    )
+    if band_label != "N/A":
+        user_context += f"Band: {band_label}\n"
+    if monthly_limit:
+        user_context += f"Monthly mobile allowance: ₹{monthly_limit:,}\n"
+
+    prompt = (
+        f"You are ORKY, an AI assistant. The user wants to run the workflow: \"{workflow.name}\".\n"
+        f"Before starting, generate a short confirmation message (2-3 sentences max).\n\n"
+        f"{user_context}\n"
+        f"Workflow: {workflow.name}\n"
+        f"Description: {workflow.description or 'N/A'}\n\n"
+        f"Guidelines:\n"
+        f"- Greet the user by first name\n"
+        f"- If there's band/allowance info, mention it naturally (e.g., 'As a {user.title} (Band {band_label}), your monthly mobile allowance is ₹{monthly_limit:,}.')\n"
+        f"- Ask if they'd like to proceed\n"
+        f"- Keep it concise and friendly\n"
+        f"- Do NOT use markdown or bullet points, just a short conversational message"
+    )
+
+    try:
+        return await generate_chat_response(
+            "You are ORKY, a friendly AI assistant. Write short, clear confirmation messages.",
+            prompt,
+        )
+    except Exception:
+        # Fallback if Gemini fails
+        if monthly_limit:
+            return (
+                f"Hi {(user.name or 'there').split()[0]}! As a {user.title} (Band {band_label}), "
+                f"your monthly mobile allowance is ₹{monthly_limit:,}. "
+                f"Would you like to proceed with the {workflow.name.lower()}?"
+            )
+        return f"I can start the {workflow.name} for you. Would you like to proceed?"
+
+
+async def _classify_confirmation(message: str) -> bool:
+    """Use Gemini to classify if the user is confirming (yes) or declining (no)."""
+    prompt = (
+        f'The user was asked to confirm a workflow. They replied: "{message}"\n\n'
+        f'Is this a confirmation (yes/proceed/sure/go ahead/ok) or a decline (no/cancel/stop/nevermind)?\n'
+        f'Respond with ONLY "yes" or "no".'
+    )
+    try:
+        response = await generate_chat_response(
+            "You classify user replies as confirmations or declines. Respond with only 'yes' or 'no'.",
+            prompt,
+        )
+        return response.strip().lower().startswith("yes")
+    except Exception:
+        # Fallback: simple keyword matching
+        lower = message.lower().strip()
+        yes_words = {"yes", "yeah", "yep", "sure", "ok", "okay", "proceed", "go", "go ahead", "y", "do it", "start"}
+        return any(w in lower for w in yes_words)
 
 
 @router.post("/upload")
@@ -375,8 +456,14 @@ async def stream_chat_message(
         )
 
     # Get or create chat session
+    chat_session = None
     if body.sessionId:
         session_id = body.sessionId
+        # Load existing session to check for pending workflow confirmation
+        sess_result = await db.execute(
+            select(ChatSession).where(ChatSession.id == session_id)
+        )
+        chat_session = sess_result.scalar_one_or_none()
     else:
         title = body.message[:50] + ("..." if len(body.message) > 50 else "")
         chat_session = ChatSession(user_id=user.id, title=title)
@@ -400,6 +487,133 @@ async def stream_chat_message(
 
     conversation_history = body.conversationHistory or []
     augmented_message = body.message + file_context if file_context else body.message
+
+    # ---- Check for pending workflow confirmation ----
+    if chat_session and chat_session.pending_workflow_id:
+        pending_wf_id = chat_session.pending_workflow_id
+        is_confirmed = await _classify_confirmation(body.message)
+
+        if is_confirmed:
+            # User confirmed — load the workflow and start it
+            print(f"[STREAM] User confirmed pending workflow {pending_wf_id}")
+            wf_result = await db.execute(
+                select(Workflow)
+                .where(Workflow.id == pending_wf_id)
+                .options(selectinload(Workflow.agents).selectinload(WorkflowAgent.agent))
+            )
+            confirmed_workflow = wf_result.scalar_one_or_none()
+
+            # Clear the pending state
+            chat_session.pending_workflow_id = None
+            await db.flush()
+
+            if confirmed_workflow:
+                # Create workflow execution and stream it
+                wf_exec = WorkflowExecution(
+                    workflow_id=confirmed_workflow.id,
+                    user_id=user.id,
+                    status="pending",
+                    trigger_input=augmented_message,
+                    variables={
+                        "_user": {
+                            "name": user.name,
+                            "email": user.email,
+                            "department": user.department,
+                            "title": user.title,
+                        },
+                    },
+                )
+                db.add(wf_exec)
+                await db.commit()
+                await db.refresh(wf_exec)
+
+                _execution_id = execution.id
+                _session_id = session_id
+                _user_msg_id = user_msg.id
+                _wf_execution_id = wf_exec.id
+                _wf_name = confirmed_workflow.name
+                _wf_description = confirmed_workflow.description
+                _message = body.message
+                _user_id = user.id
+                _conversation_history = conversation_history
+
+                async def confirmed_wf_generator():
+                    event_queue: asyncio.Queue = asyncio.Queue()
+
+                    async def on_event(event_type: str, data: dict):
+                        await event_queue.put({"type": event_type, "data": data})
+
+                    async def run_wf():
+                        try:
+                            await run_workflow(_wf_execution_id, on_event=on_event)
+                        except Exception as e:
+                            await event_queue.put({"type": "step_failed", "data": {"step_order": -1, "agent_name": "", "error": str(e)}})
+                        finally:
+                            await event_queue.put(None)
+
+                    wf_task = asyncio.create_task(run_wf())
+                    while True:
+                        event = await event_queue.get()
+                        if event is None:
+                            break
+                        yield f"data: {json.dumps(event)}\n\n"
+                        await asyncio.sleep(0.05)
+                    await wf_task
+
+                    try:
+                        async with async_session() as summary_db:
+                            exec_result = await summary_db.execute(
+                                select(WorkflowExecution).where(WorkflowExecution.id == _wf_execution_id)
+                            )
+                            wf_exec_obj = exec_result.scalar_one()
+                            response_text, actions_taken = await generate_workflow_summary(
+                                db=summary_db, execution_id=_wf_execution_id,
+                                workflow_name=_wf_name, workflow_description=_wf_description,
+                                execution_status=wf_exec_obj.status, message=_message,
+                                user_id=_user_id, conversation_history=_conversation_history,
+                            )
+                            actions_list = [
+                                {"app": a.app, "action": a.action, "input": a.input,
+                                 "output": a.output, "success": a.success, "error": a.error}
+                                for a in actions_taken
+                            ]
+                            assistant_msg = ChatMessage(
+                                session_id=_session_id, role="assistant",
+                                content=response_text, sources=[],
+                            )
+                            summary_db.add(assistant_msg)
+                            exec_record = await summary_db.execute(
+                                select(Execution).where(Execution.id == _execution_id)
+                            )
+                            exc = exec_record.scalar_one_or_none()
+                            if exc:
+                                exc.conversational_response = response_text
+                                exc.status = "action_completed" if actions_taken else "conversational"
+                            await summary_db.commit()
+                            asyncio.create_task(_embed_chat_messages_safe([_user_msg_id, assistant_msg.id]))
+                            yield f"data: {json.dumps({'type': 'response', 'data': {'response': response_text, 'sources': [], 'status': 'action_completed' if actions_taken else 'conversational', 'executionId': _execution_id, 'sessionId': _session_id, 'actionsTaken': actions_list, 'workflowExecutionId': _wf_execution_id}})}\n\n"
+                    except Exception as e:
+                        print(f"[STREAM] Summary generation error: {e}")
+                        yield f"data: {json.dumps({'type': 'response', 'data': {'response': f'Workflow completed but summary generation failed: {str(e)}', 'sources': [], 'status': 'action_completed', 'executionId': _execution_id, 'sessionId': _session_id, 'workflowExecutionId': _wf_execution_id}})}\n\n"
+
+                return StreamingResponse(
+                    confirmed_wf_generator(), media_type="text/event-stream",
+                    headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+                )
+
+        # User declined or workflow not found — clear pending state and respond normally
+        chat_session.pending_workflow_id = None
+        response_text = "No problem! Let me know if there's anything else I can help with."
+        execution.conversational_response = response_text
+        execution.status = "conversational"
+        assistant_msg = ChatMessage(session_id=session_id, role="assistant", content=response_text, sources=[])
+        db.add(assistant_msg)
+        await db.commit()
+
+        async def declined_generator():
+            yield f"data: {json.dumps({'type': 'response', 'data': {'response': response_text, 'sources': [], 'status': 'conversational', 'executionId': execution.id, 'sessionId': session_id}})}\n\n"
+
+        return StreamingResponse(declined_generator(), media_type="text/event-stream")
 
     # ---- Check for paused workflow BEFORE intent classification ----
     # This must happen first because "Here is the attached document" gets classified
@@ -497,45 +711,41 @@ async def stream_chat_message(
     if not (paused_execution and file_attachment):
         matched_workflow = await match_workflow(db, user, body.message)
 
-    # If it's a workflow (new or resumed), stream it
-    if matched_workflow or (paused_execution and file_attachment):
-        # Create workflow execution for new workflows
-        wf_execution_id = None
-        wf_name = ""
-        wf_description = None
+    # If a NEW workflow matched, ask for confirmation instead of executing immediately
+    if matched_workflow and not (paused_execution and file_attachment):
+        confirmation_msg = await _generate_confirmation_message(user, matched_workflow)
 
-        if paused_execution and file_attachment:
-            wf_execution_id = paused_execution.id
-            # Load workflow name
-            wf_result = await db.execute(
-                select(WorkflowExecution)
-                .where(WorkflowExecution.id == paused_execution.id)
-                .options(selectinload(WorkflowExecution.workflow))
-            )
-            pe = wf_result.scalar_one()
-            wf_name = pe.workflow.name
-            wf_description = pe.workflow.description
-        elif matched_workflow:
-            wf_exec = WorkflowExecution(
-                workflow_id=matched_workflow.id,
-                user_id=user.id,
-                status="pending",
-                trigger_input=augmented_message,
-                variables={
-                    "_user": {
-                        "name": user.name,
-                        "email": user.email,
-                        "department": user.department,
-                        "title": user.title,
-                    },
-                },
-            )
-            db.add(wf_exec)
-            await db.commit()
-            await db.refresh(wf_exec)
-            wf_execution_id = wf_exec.id
-            wf_name = matched_workflow.name
-            wf_description = matched_workflow.description
+        # Store pending workflow on the session
+        if chat_session:
+            chat_session.pending_workflow_id = matched_workflow.id
+
+        execution.conversational_response = confirmation_msg
+        execution.status = "conversational"
+        assistant_msg = ChatMessage(session_id=session_id, role="assistant", content=confirmation_msg, sources=[])
+        db.add(assistant_msg)
+        await db.commit()
+
+        msg_ids = [m.id for m in [user_msg, assistant_msg] if m.id]
+        if msg_ids:
+            background_tasks.add_task(_embed_chat_messages, msg_ids)
+
+        async def confirmation_generator():
+            yield f"data: {json.dumps({'type': 'response', 'data': {'response': confirmation_msg, 'sources': [], 'status': 'conversational', 'executionId': execution.id, 'sessionId': session_id}})}\n\n"
+
+        return StreamingResponse(confirmation_generator(), media_type="text/event-stream")
+
+    # If it's a resumed workflow (paused + file attachment), stream it
+    if paused_execution and file_attachment:
+        wf_execution_id = paused_execution.id
+        # Load workflow name
+        wf_result = await db.execute(
+            select(WorkflowExecution)
+            .where(WorkflowExecution.id == paused_execution.id)
+            .options(selectinload(WorkflowExecution.workflow))
+        )
+        pe = wf_result.scalar_one()
+        wf_name = pe.workflow.name
+        wf_description = pe.workflow.description
 
         # Commit user message before streaming
         await db.commit()
@@ -551,7 +761,6 @@ async def stream_chat_message(
         _augmented_message = augmented_message
         _user_id = user.id
         _conversation_history = conversation_history
-        _is_resume = bool(paused_execution and file_attachment)
         _file_attachment = file_attachment
 
         async def workflow_generator():
@@ -562,10 +771,7 @@ async def stream_chat_message(
 
             async def run_wf():
                 try:
-                    if _is_resume:
-                        await resume_workflow(_wf_execution_id, _file_attachment, on_event=on_event)
-                    else:
-                        await run_workflow(_wf_execution_id, on_event=on_event)
+                    await resume_workflow(_wf_execution_id, _file_attachment, on_event=on_event)
                 except Exception as e:
                     await event_queue.put({"type": "step_failed", "data": {"step_order": -1, "agent_name": "", "error": str(e)}})
                 finally:
