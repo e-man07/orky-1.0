@@ -1,6 +1,43 @@
 import json
+import logging
 from services.gemini import generate_chat_response
+from services.slm import slm_generate, strip_thinking
 from schemas.workflow import GeneratedWorkflowPlan, GeneratedAgentPlan
+
+logger = logging.getLogger(__name__)
+
+
+def _build_toon_catalog(apps_with_actions: list[dict]) -> str:
+    """Build a TOON tabular catalog of apps and actions for token-efficient SLM prompts."""
+    lines = ["@@app_slug|action_name|description|parameters"]
+    for app in apps_with_actions:
+        for action in app.get("actions", []):
+            params = ""
+            if action.get("input_schema"):
+                props = action["input_schema"].get("properties", {})
+                if props:
+                    params = ", ".join(f"{k} ({v.get('type', 'string')})" for k, v in props.items())
+            desc = action.get("description", action.get("display_name", ""))
+            lines.append(f"{app['slug']}|{action['name']}|{desc}|{params}")
+    return "\n".join(lines)
+
+
+def _build_text_catalog(apps_with_actions: list[dict]) -> str:
+    """Build verbose text catalog for Gemini prompts."""
+    catalog = ""
+    for app in apps_with_actions:
+        catalog += f"\n## App: {app['name']} (slug: {app['slug']})\n"
+        catalog += f"Description: {app.get('description', 'N/A')}\n"
+        catalog += "Available Actions:\n"
+        for action in app.get("actions", []):
+            catalog += f"  - {action['name']}: {action.get('description', action.get('display_name', ''))}\n"
+            if action.get("input_schema"):
+                schema = action["input_schema"]
+                props = schema.get("properties", {})
+                if props:
+                    param_strs = [f"{k} ({v.get('type', 'string')})" for k, v in props.items()]
+                    catalog += f"    Parameters: {', '.join(param_strs)}\n"
+    return catalog
 
 
 async def generate_workflow_plan(
@@ -9,23 +46,9 @@ async def generate_workflow_plan(
 ) -> GeneratedWorkflowPlan:
     """
     Takes a workflow description + available apps catalog.
-    Calls Gemini to generate a structured plan with steps + agent suggestions.
+    Calls SLM (with TOON catalog) to generate a structured plan with steps + agent suggestions.
+    Falls back to Gemini if SLM fails.
     """
-    # Build apps catalog for the prompt
-    apps_catalog = ""
-    for app in apps_with_actions:
-        apps_catalog += f"\n## App: {app['name']} (slug: {app['slug']})\n"
-        apps_catalog += f"Description: {app.get('description', 'N/A')}\n"
-        apps_catalog += "Available Actions:\n"
-        for action in app.get("actions", []):
-            apps_catalog += f"  - {action['name']}: {action.get('description', action.get('display_name', ''))}\n"
-            if action.get("input_schema"):
-                schema = action["input_schema"]
-                props = schema.get("properties", {})
-                if props:
-                    param_strs = [f"{k} ({v.get('type', 'string')})" for k, v in props.items()]
-                    apps_catalog += f"    Parameters: {', '.join(param_strs)}\n"
-
     system_prompt = """You are an AI workflow architect. Given a natural language description of a workflow, you design a structured automation plan.
 
 You must output valid JSON matching this exact schema:
@@ -65,16 +88,32 @@ File upload awareness:
 
 Respond with ONLY the JSON object. No markdown fences, no explanations."""
 
-    user_prompt = f"""Design a workflow for the following description:
+    # Try SLM first with TOON catalog (token-efficient)
+    try:
+        toon_catalog = _build_toon_catalog(apps_with_actions)
+        slm_user_prompt = f"""Design a workflow for the following description:
+
+"{description}"
+
+Available Apps & Actions (TOON format — @@header row, then pipe-delimited data rows):
+{toon_catalog}
+
+Generate the workflow plan as JSON."""
+
+        response = await slm_generate(system_prompt, slm_user_prompt, response_format={"type": "json_object"}, temperature=0.1, max_tokens=4096)
+        response = strip_thinking(response)
+    except Exception as e:
+        logger.warning("SLM generate_workflow_plan failed, falling back to Gemini: %s", e)
+        text_catalog = _build_text_catalog(apps_with_actions)
+        gemini_user_prompt = f"""Design a workflow for the following description:
 
 "{description}"
 
 Available Apps & Actions:
-{apps_catalog}
+{text_catalog}
 
 Generate the workflow plan as JSON."""
-
-    response = await generate_chat_response(system_prompt, user_prompt)
+        response = await generate_chat_response(system_prompt, gemini_user_prompt)
 
     # Parse the JSON response
     # Strip markdown fences if present
@@ -91,18 +130,27 @@ Generate the workflow plan as JSON."""
     # Validate and convert to schema
     agents = []
     for agent_data in plan_data.get("agents", []):
+        # SLM may return steps as a list; coerce to string
+        agent_steps = agent_data.get("steps", "")
+        if isinstance(agent_steps, list):
+            agent_steps = "\n".join(agent_steps)
         agents.append(GeneratedAgentPlan(
             name=agent_data["name"],
             description=agent_data.get("description", ""),
             role=agent_data.get("role", ""),
-            steps=agent_data.get("steps", ""),
+            steps=agent_steps,
             actions=agent_data.get("actions", []),
             taskPrompt=agent_data.get("taskPrompt", ""),
         ))
 
+    # Top-level steps may also be a list
+    plan_steps = plan_data.get("steps", "")
+    if isinstance(plan_steps, list):
+        plan_steps = "\n".join(plan_steps)
+
     return GeneratedWorkflowPlan(
         name=plan_data.get("name", "Generated Workflow"),
         description=plan_data.get("description", description),
-        steps=plan_data.get("steps", ""),
+        steps=plan_steps,
         agents=agents,
     )

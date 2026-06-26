@@ -13,3 +13,7 @@ httpx
 python-multipart
 boto3
 snowflake-connector-python
+openai
+pytest
+pytest-asyncio
+respx

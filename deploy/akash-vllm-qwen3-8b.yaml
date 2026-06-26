@@ -1,0 +1,62 @@
+---
+version: "2.0"
+
+services:
+  vllm:
+    image: vllm/vllm-openai:v0.8.5
+    expose:
+      - port: 8000
+        as: 8000
+        to:
+          - global: true
+    command:
+      - "bash"
+      - "-c"
+      - |
+        echo "Downloading model weights..."
+        huggingface-cli download Qwen/Qwen3-8B-AWQ --local-dir /models/Qwen3-8B-AWQ
+        echo "Starting vLLM server..."
+        python3 -m vllm.entrypoints.openai.api_server \
+          --model /models/Qwen3-8B-AWQ \
+          --served-model-name Qwen/Qwen3-8B-AWQ \
+          --host 0.0.0.0 \
+          --port 8000 \
+          --max-model-len 40960 \
+          --gpu-memory-utilization 0.90 \
+          --dtype auto \
+          --quantization awq \
+          --enable-auto-tool-choice \
+          --tool-call-parser hermes \
+          --api-key "${VLLM_API_KEY}"
+    env:
+      - "VLLM_API_KEY=orky-qwen3-ak7Xm9Pv2dR4"
+      - "HF_HOME=/models/.cache"
+
+profiles:
+  compute:
+    vllm:
+      resources:
+        cpu:
+          units: 8
+        memory:
+          size: 32Gi
+        storage:
+          - size: 80Gi
+        gpu:
+          units: 1
+          attributes:
+            vendor:
+              nvidia:
+                - model: a100
+  placement:
+    akash:
+      pricing:
+        vllm:
+          denom: uakt
+          amount: 10000
+
+deployment:
+  vllm:
+    akash:
+      profile: vllm
+      count: 1

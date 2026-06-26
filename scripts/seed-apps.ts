@@ -198,6 +198,23 @@ const apps = [
     ],
   },
   {
+    name: 'Freshservice',
+    slug: 'freshservice',
+    description: 'IT Service Management platform for incident, change, and asset management',
+    icon: 'Headset',
+    logoUrl: '/logos/freshservice.png',
+    category: 'ITSM',
+    actions: [
+      { name: 'create_ticket', displayName: 'Create Ticket', description: 'Create a new incident ticket in Freshservice', actionType: 'rest_api', inputSchema: { type: 'object', properties: { subject: { type: 'string', description: 'Ticket subject/title' }, description: { type: 'string', description: 'HTML description of the ticket' }, email: { type: 'string', description: 'Email of the requester' }, priority: { type: 'integer', enum: [1, 2, 3, 4], description: '1=Low, 2=Medium, 3=High, 4=Urgent' }, status: { type: 'integer', enum: [2, 3, 4, 5], description: '2=Open, 3=Pending, 4=Resolved, 5=Closed' }, urgency: { type: 'integer', enum: [1, 2, 3], description: '1=Low, 2=Medium, 3=High' }, impact: { type: 'integer', enum: [1, 2, 3], description: '1=Low, 2=Medium, 3=High' }, category: { type: 'string' }, group_id: { type: 'integer', description: 'ID of the agent group to assign' }, responder_id: { type: 'integer', description: 'ID of the agent to assign' } }, required: ['subject', 'description', 'email', 'priority', 'status'] } },
+      { name: 'update_ticket', displayName: 'Update Ticket', description: 'Update an existing Freshservice ticket', actionType: 'rest_api', inputSchema: { type: 'object', properties: { ticket_id: { type: 'integer', description: 'ID of the ticket to update' }, status: { type: 'integer', description: '2=Open, 3=Pending, 4=Resolved, 5=Closed' }, priority: { type: 'integer', description: '1=Low, 2=Medium, 3=High, 4=Urgent' }, category: { type: 'string' }, group_id: { type: 'integer' }, responder_id: { type: 'integer' } }, required: ['ticket_id'] } },
+      { name: 'get_ticket', displayName: 'Get Ticket', description: 'Retrieve a Freshservice ticket by ID', actionType: 'rest_api', inputSchema: { type: 'object', properties: { ticket_id: { type: 'integer', description: 'ID of the ticket to retrieve' } }, required: ['ticket_id'] } },
+      { name: 'list_tickets', displayName: 'List Tickets', description: 'List tickets with optional filters', actionType: 'rest_api', inputSchema: { type: 'object', properties: { filter: { type: 'string', description: 'Filter query, e.g. "priority:3 AND status:2"' }, per_page: { type: 'integer', description: 'Results per page (max 100)' }, page: { type: 'integer', description: 'Page number' } } } },
+      { name: 'close_ticket', displayName: 'Close Ticket', description: 'Close a Freshservice ticket', actionType: 'rest_api', inputSchema: { type: 'object', properties: { ticket_id: { type: 'integer', description: 'ID of the ticket to close' }, close_notes: { type: 'string', description: 'Resolution notes' } }, required: ['ticket_id'] } },
+      { name: 'create_service_request', displayName: 'Create Service Request', description: 'Place a service catalog request', actionType: 'rest_api', inputSchema: { type: 'object', properties: { catalog_item_id: { type: 'integer', description: 'Service catalog item ID' }, email: { type: 'string', description: 'Email of the requester' }, quantity: { type: 'integer' }, custom_fields: { type: 'object', description: 'Custom field values for the catalog item' } }, required: ['catalog_item_id', 'email'] } },
+      { name: 'add_ticket_note', displayName: 'Add Ticket Note', description: 'Add a note/comment to a ticket', actionType: 'rest_api', inputSchema: { type: 'object', properties: { ticket_id: { type: 'integer', description: 'ID of the ticket' }, body: { type: 'string', description: 'Note content (HTML supported)' }, private: { type: 'boolean', description: 'Whether the note is private' } }, required: ['ticket_id', 'body'] } },
+    ],
+  },
+  {
     name: 'DocuSign',
     slug: 'docusign',
     description: 'Electronic signature and agreement management platform',

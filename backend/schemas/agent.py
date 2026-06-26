@@ -7,7 +7,7 @@ class AgentCreate(BaseModel):
     description: str | None = None
     role: str | None = None
     steps: str | None = None
-    model: str = "gemini-2.0-flash"
+    model: str = "gemini-2.5-flash"
     icon: str | None = None
     color: str | None = "#3B82F6"
     status: str = "active"

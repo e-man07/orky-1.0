@@ -23,6 +23,18 @@ class Settings(BaseSettings):
     sharepoint_client_secret: str = ""
     sharepoint_site: str = ""
 
+    # SLM (Qwen3-8B on Akash/vLLM)
+    slm_base_url: str = ""
+    slm_api_key: str = "not-needed"
+    slm_model_name: str = "Qwen/Qwen3-8B-AWQ"
+
+    # SMTP / Email
+    smtp_server: str = ""
+    smtp_port: str = "587"
+    smtp_username: str = ""
+    smtp_password: str = ""
+    from_email: str = ""
+
     # CORS
     frontend_url: str = "http://localhost:3000"
 

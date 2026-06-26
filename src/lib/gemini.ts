@@ -12,7 +12,7 @@ export const embeddingModel = genAI.getGenerativeModel({
 })
 
 export const chatModel = genAI.getGenerativeModel({
-  model: 'gemini-2.0-flash',
+  model: 'gemini-2.5-flash',
 })
 
 // Retry wrapper for Gemini 429 rate limits
@@ -145,7 +145,7 @@ export async function generateWithTools(
   systemPrompt: string,
   userMessage: string,
   tools: FunctionDeclarationsTool[],
-  modelName = 'gemini-2.0-flash',
+  modelName = 'gemini-2.5-flash',
 ): Promise<GenerateContentResult> {
   return withRetry(async () => {
     const model = genAI.getGenerativeModel({
@@ -161,7 +161,7 @@ export async function generateWithToolsChat(
   systemPrompt: string,
   messages: { role: 'user' | 'model' | 'function'; parts: any[] }[],
   tools: FunctionDeclarationsTool[],
-  modelName = 'gemini-2.0-flash',
+  modelName = 'gemini-2.5-flash',
 ): Promise<GenerateContentResult> {
   return withRetry(async () => {
     const model = genAI.getGenerativeModel({

@@ -53,7 +53,7 @@ export async function POST(req: Request) {
         description,
         role,
         steps,
-        model: model || 'gemini-2.0-flash',
+        model: model || 'gemini-2.5-flash',
         icon,
         color,
         status: status || 'active',

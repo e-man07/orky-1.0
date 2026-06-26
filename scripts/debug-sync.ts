@@ -64,7 +64,7 @@ async function test() {
   console.log('   Embedding OK, dims:', embResult.embedding.values.length)
 
   console.log('8. Testing Gemini summarize...')
-  const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+  const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
   const sumResult = await chatModel.generateContent('Say "hello" in one word.')
   console.log('   Gemini OK:', sumResult.response.text().trim())
 

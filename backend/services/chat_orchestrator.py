@@ -19,9 +19,13 @@ from models.app import App, AppAction
 from models.user import User
 from models.workflow import Workflow, WorkflowAgent, WorkflowExecution, StepExecution
 from services.gemini import generate_with_tools, generate_with_tools_chat, generate_chat_response, generate_embedding
+from services.slm import slm_generate, strip_thinking
 from services.action_executor import execute_action
 from services.workflow_engine import run_workflow, resume_workflow
 from services.rag.search import chat_history_search
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -358,8 +362,20 @@ async def match_workflow(db: AsyncSession, user: User, message: str) -> Workflow
         'If no workflow matches, respond with ONLY "none".'
     )
 
-    response_text = await generate_chat_response("You are a workflow matcher.", prompt)
-    response_text = response_text.strip().lower()
+    # Try SLM first for fast classification
+    try:
+        slm_prompt = f"/no_think\n{prompt}"
+        response_text = await slm_generate(
+            "You are a workflow matcher.",
+            slm_prompt,
+            temperature=0.1,
+            max_tokens=20,
+        )
+        response_text = strip_thinking(response_text).strip().lower()
+    except Exception as e:
+        logger.warning("SLM match_workflow failed, falling back to Gemini: %s", e)
+        response_text = await generate_chat_response("You are a workflow matcher.", prompt)
+        response_text = response_text.strip().lower()
 
     if response_text == "none":
         return None

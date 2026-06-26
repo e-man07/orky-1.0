@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const prisma = new PrismaClient()
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '')
-const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
 async function summarizeArticle(title: string, body: string): Promise<string> {
   const prompt = `You are a knowledge base summarizer. Given an article title and body, extract ONLY the key points as a concise bullet-point summary. Keep it short — max 5-8 bullet points. Strip all HTML tags. Only include factual information, no filler.

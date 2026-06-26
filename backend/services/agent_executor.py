@@ -26,6 +26,29 @@ class AgentExecutionResult:
     rejection_reason: str | None = None
 
 
+def _synthesize_thinking(actions_invoked: list[dict]) -> str:
+    """Build a human-readable summary from executed actions without an LLM call.
+
+    Used for single-tool agents so we skip the extra Gemini round-trip that
+    would otherwise just rephrase the tool result.
+    """
+    if not actions_invoked:
+        return "Agent completed without invoking any actions."
+    lines = []
+    for a in actions_invoked:
+        out = a.get("output")
+        if isinstance(out, dict):
+            # Surface the most useful identifiers if present
+            detail = ", ".join(
+                f"{k}={v}" for k, v in out.items()
+                if k in ("instance_id", "number", "url", "sys_id", "state", "bucket_name", "key", "id")
+            ) or json.dumps(out, default=str)[:300]
+        else:
+            detail = str(out)[:300]
+        lines.append(f"Executed {a.get('action')} via {a.get('app')}: {detail}")
+    return "\n".join(lines)
+
+
 async def execute_workflow_agent(
     agent_name: str,
     role: str,
@@ -111,6 +134,10 @@ async def execute_workflow_agent(
 
     tools = [types.Tool(function_declarations=function_declarations)] if function_declarations else []
 
+    # Single-tool agents never need to chain calls, so we can skip the
+    # follow-up summarization round and save a Gemini request.
+    single_tool = len(actions) <= 1
+
     try:
         # First call to Gemini
         result = await generate_with_tools(system_prompt, task_prompt, tools, model)
@@ -188,7 +215,13 @@ async def execute_workflow_agent(
                     )
                 ))
 
-            # Send function results back
+            # Single-tool agents: no chaining possible, so synthesize the summary
+            # from the executed action(s) instead of spending another Gemini call.
+            if single_tool:
+                thinking = _synthesize_thinking(actions_invoked)
+                break
+
+            # Send function results back (multi-tool agents may chain)
             messages.append(types.Content(role="user", parts=function_response_parts))
             result = await generate_with_tools_chat(system_prompt, messages, tools, model)
             response = result

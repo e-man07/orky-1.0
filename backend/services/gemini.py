@@ -1,14 +1,20 @@
 import asyncio
 import json
+import logging
 from google import genai
 from google.genai import types
 from config import get_settings
+from services.slm import slm_generate, strip_thinking
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 client = genai.Client(api_key=settings.google_api_key)
 
 EMBEDDING_MODEL = "gemini-embedding-001"
-CHAT_MODEL = "gemini-2.0-flash"
+# gemini-2.5-flash-lite has a higher free-tier daily quota than gemini-2.5-flash,
+# which makes the multi-call agentic workflows usable without a paid key.
+CHAT_MODEL = "gemini-2.5-flash-lite"
 
 
 async def with_retry(fn, max_retries: int = 3):
@@ -131,6 +137,25 @@ User message: "{user_message}"
 
 Respond with ONLY the category name, nothing else."""
 
+    # Try SLM first (fast, local classification)
+    try:
+        slm_prompt = f"/no_think\n{prompt}"
+        response = await slm_generate(
+            "You are an intent classifier. Respond with only one word.",
+            slm_prompt,
+            temperature=0.1,
+            max_tokens=20,
+        )
+        text = strip_thinking(response).strip().lower()
+        if "kb_query" in text:
+            return "kb_query"
+        if "workflow" in text:
+            return "workflow"
+        return "conversational"
+    except Exception as e:
+        logger.warning("SLM classify_intent failed, falling back to Gemini: %s", e)
+
+    # Gemini fallback
     async def _call():
         response = await asyncio.to_thread(
             client.models.generate_content,

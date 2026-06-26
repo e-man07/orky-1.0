@@ -28,7 +28,7 @@ export function AgentForm({ agent, onSaved }: AgentFormProps) {
   const [description, setDescription] = useState('')
   const [role, setRole] = useState('')
   const [steps, setSteps] = useState('')
-  const [model, setModel] = useState('gemini-2.0-flash')
+  const [model, setModel] = useState('gemini-2.5-flash')
   const [status, setStatus] = useState('active')
   const [actionKeys, setActionKeys] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
@@ -40,7 +40,7 @@ export function AgentForm({ agent, onSaved }: AgentFormProps) {
       setDescription(agent.description || '')
       setRole(agent.role || '')
       setSteps(agent.steps || '')
-      setModel(agent.model || 'gemini-2.0-flash')
+      setModel(agent.model || 'gemini-2.5-flash')
       setStatus(agent.status || 'active')
       // Convert backend action objects to string keys
       const keys = (agent.actions || [])
@@ -58,7 +58,7 @@ export function AgentForm({ agent, onSaved }: AgentFormProps) {
       setDescription('')
       setRole('')
       setSteps('')
-      setModel('gemini-2.0-flash')
+      setModel('gemini-2.5-flash')
       setStatus('active')
       setActionKeys([])
     }
@@ -210,7 +210,7 @@ export function AgentForm({ agent, onSaved }: AgentFormProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-neutral-950 border-white/10">
-              <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
+              <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
               <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
               <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
             </SelectContent>

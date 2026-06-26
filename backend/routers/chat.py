@@ -42,74 +42,54 @@ BAND_LIMITS = {
 
 
 async def _generate_confirmation_message(user: User, workflow: Workflow) -> str:
-    """Generate a confirmation message for a matched workflow using Gemini."""
+    """Build a confirmation message for a matched workflow.
+
+    Uses a template instead of a Gemini call to save quota — the confirmation
+    prompt is a fixed greeting + "proceed?" that does not need a model.
+    """
     # Strip internal terms from the workflow name for user-facing messages
-    friendly_name = (workflow.name or "").replace(" Automation", "").replace(" automation", "")
+    friendly_name = (workflow.name or "").replace(" Automation", "").replace(" automation", "").strip()
+    first_name = (user.name or "there").split()[0]
 
     # Only include band/allowance info for reimbursement-related workflows
     is_reimbursement = "reimburs" in (workflow.name or "").lower()
 
-    user_context = (
-        f"User: {user.name}\n"
-        f"Title: {user.title or 'N/A'}\n"
-        f"Department: {user.department or 'N/A'}\n"
-    )
-
-    band_hint = ""
+    band_sentence = ""
     if is_reimbursement:
         band_info = BAND_LIMITS.get(user.title or "", {})
-        band_label = band_info.get("band", "N/A")
+        band_label = band_info.get("band")
         monthly_limit = band_info.get("monthly_mobile_limit")
-        if band_label != "N/A":
-            user_context += f"Band: {band_label}\n"
-        if monthly_limit:
-            user_context += f"Monthly mobile allowance: ₹{monthly_limit:,}\n"
-            band_hint = f"- Mention the band and allowance naturally (e.g., 'As a {user.title} (Band {band_label}), your monthly mobile allowance is ₹{monthly_limit:,}.')\n"
+        if band_label and monthly_limit:
+            band_sentence = (
+                f" As a {user.title} (Band {band_label}), your monthly mobile allowance is ₹{monthly_limit:,}."
+            )
 
-    prompt = (
-        f"You are ORKY, an AI assistant. The user wants to submit a request related to: \"{friendly_name}\".\n"
-        f"Before starting, generate a short confirmation message (2-3 sentences max).\n\n"
-        f"{user_context}\n"
-        f"Request type: {friendly_name}\n"
-        f"Description: {workflow.description or 'N/A'}\n\n"
-        f"Guidelines:\n"
-        f"- Greet the user by first name\n"
-        f"{band_hint}"
-        f"- Ask if they'd like to proceed\n"
-        f"- Keep it concise and friendly\n"
-        f"- Do NOT use markdown or bullet points, just a short conversational message\n"
-        f"- Do NOT mention 'automation', 'workflow', 'agentic', 'agents', or any internal system terms\n"
-        f"- Do NOT mention mobile allowance or reimbursement limits unless this is a reimbursement request"
+    return (
+        f"Hi {first_name}! I can help you with your {friendly_name.lower()}.{band_sentence} "
+        f"Would you like me to go ahead and proceed?"
     )
-
-    try:
-        return await generate_chat_response(
-            "You are ORKY, a friendly AI assistant. Write short, clear confirmation messages. Never mention automation, workflows, agents, or internal system details.",
-            prompt,
-        )
-    except Exception:
-        # Fallback if Gemini fails
-        return f"Hi {(user.name or 'there').split()[0]}! I can help you with your {friendly_name.lower()}. Would you like to proceed?"
 
 
 async def _classify_confirmation(message: str) -> bool:
-    """Use Gemini to classify if the user is confirming (yes) or declining (no)."""
-    prompt = (
-        f'The user was asked to confirm a workflow. They replied: "{message}"\n\n'
-        f'Is this a confirmation (yes/proceed/sure/go ahead/ok) or a decline (no/cancel/stop/nevermind)?\n'
-        f'Respond with ONLY "yes" or "no".'
-    )
-    try:
-        response = await generate_chat_response(
-            "You classify user replies as confirmations or declines. Respond with only 'yes' or 'no'.",
-            prompt,
-        )
-        return response.strip().lower().startswith("yes")
-    except Exception:
-        # Fallback: simple keyword matching
-        lower = message.lower().strip()
-        yes_words = {"yes", "yeah", "yep", "sure", "ok", "okay", "proceed", "go", "go ahead", "y", "do it", "start"}
-        return any(w in lower for w in yes_words)
+    """Classify whether the user is confirming (yes) or declining (no).
+
+    Uses keyword matching instead of an LLM call to save Gemini quota — a
+    yes/no confirmation gate does not need a model round-trip.
+    """
+    lower = message.lower().strip()
+
+    # Explicit declines take priority
+    decline_words = {"no", "nope", "cancel", "stop", "nevermind", "never mind", "don't", "dont", "abort"}
+    if any(w in lower.split() for w in {"no", "nope", "cancel", "stop", "abort"}) or any(
+        w in lower for w in decline_words
+    ):
+        return False
+
+    yes_words = {
+        "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "proceed", "go ahead",
+        "go", "do it", "start", "confirm", "create", "please", "sounds good", "lets go", "let's go",
+    }
+    return any(w in lower for w in yes_words)
 
 
 @router.post("/upload")

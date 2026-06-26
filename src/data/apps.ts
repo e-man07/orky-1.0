@@ -304,6 +304,27 @@ export const APP_CATALOG: AppDefinition[] = [
     ],
   },
   {
+    name: 'Freshservice',
+    slug: 'freshservice',
+    description: 'IT Service Management platform for incident, change, and asset management',
+    icon: 'Headset',
+    logoUrl: '/logos/freshservice.png',
+    category: 'ITSM',
+    credentialFields: [
+      { key: 'domain', label: 'Domain', placeholder: 'yourcompany.freshservice.com' },
+      { key: 'api_key', label: 'API Key', type: 'password', placeholder: 'Your Freshservice API key' },
+    ],
+    actions: [
+      { name: 'create_ticket', displayName: 'Create Ticket', description: 'Create a new incident ticket in Freshservice', actionType: 'rest_api', inputSchema: { type: 'object', properties: { subject: { type: 'string', description: 'Ticket subject/title' }, description: { type: 'string', description: 'HTML description of the ticket' }, email: { type: 'string', description: 'Email of the requester' }, priority: { type: 'integer', enum: [1, 2, 3, 4], description: '1=Low, 2=Medium, 3=High, 4=Urgent' }, status: { type: 'integer', enum: [2, 3, 4, 5], description: '2=Open, 3=Pending, 4=Resolved, 5=Closed' } }, required: ['subject', 'description', 'email', 'priority', 'status'] } },
+      { name: 'update_ticket', displayName: 'Update Ticket', description: 'Update an existing Freshservice ticket', actionType: 'rest_api', inputSchema: { type: 'object', properties: { ticket_id: { type: 'integer', description: 'ID of the ticket to update' }, status: { type: 'integer' }, priority: { type: 'integer' }, category: { type: 'string' } }, required: ['ticket_id'] } },
+      { name: 'get_ticket', displayName: 'Get Ticket', description: 'Retrieve a Freshservice ticket by ID', actionType: 'rest_api', inputSchema: { type: 'object', properties: { ticket_id: { type: 'integer', description: 'ID of the ticket to retrieve' } }, required: ['ticket_id'] } },
+      { name: 'list_tickets', displayName: 'List Tickets', description: 'List tickets with optional filters', actionType: 'rest_api', inputSchema: { type: 'object', properties: { filter: { type: 'string', description: 'Filter query' }, per_page: { type: 'integer' }, page: { type: 'integer' } } } },
+      { name: 'close_ticket', displayName: 'Close Ticket', description: 'Close a Freshservice ticket', actionType: 'rest_api', inputSchema: { type: 'object', properties: { ticket_id: { type: 'integer', description: 'ID of the ticket to close' }, close_notes: { type: 'string', description: 'Resolution notes' } }, required: ['ticket_id'] } },
+      { name: 'create_service_request', displayName: 'Create Service Request', description: 'Place a service catalog request', actionType: 'rest_api', inputSchema: { type: 'object', properties: { catalog_item_id: { type: 'integer', description: 'Service catalog item ID' }, email: { type: 'string', description: 'Email of the requester' }, quantity: { type: 'integer' }, custom_fields: { type: 'object' } }, required: ['catalog_item_id', 'email'] } },
+      { name: 'add_ticket_note', displayName: 'Add Ticket Note', description: 'Add a note/comment to a ticket', actionType: 'rest_api', inputSchema: { type: 'object', properties: { ticket_id: { type: 'integer', description: 'ID of the ticket' }, body: { type: 'string', description: 'Note content (HTML supported)' }, private: { type: 'boolean', description: 'Whether the note is private' } }, required: ['ticket_id', 'body'] } },
+    ],
+  },
+  {
     name: 'DocuSign',
     slug: 'docusign',
     description: 'Electronic signature and agreement management platform',
@@ -411,7 +432,7 @@ export const APP_CATALOG: AppDefinition[] = [
 ]
 
 /** Slugs that are fully configurable today — the rest show "Coming Soon" */
-export const CONFIGURABLE_SLUGS = new Set(['servicenow', 'aws', 'snowflake', 'slack', 'sharepoint', 'tinyfish'])
+export const CONFIGURABLE_SLUGS = new Set(['servicenow', 'aws', 'snowflake', 'slack', 'sharepoint', 'tinyfish', 'freshservice'])
 
 /** Lookup helpers */
 export const APP_BY_SLUG = Object.fromEntries(APP_CATALOG.map((a) => [a.slug, a]))

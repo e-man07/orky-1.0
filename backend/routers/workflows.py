@@ -310,7 +310,7 @@ async def generate_workflow(
             description=agent_plan.description,
             role=agent_plan.role,
             steps=agent_plan.steps,
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
         )
         db.add(agent)
         await db.flush()

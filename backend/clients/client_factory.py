@@ -14,6 +14,7 @@ from clients.o365 import O365Client
 from clients.whatsapp import WhatsAppClient
 from clients.confluence import ConfluenceClient
 from clients.freshworks import FreshWorksClient
+from clients.freshservice import FreshserviceClient
 from clients.docusign import DocuSignClient
 from clients.adp import ADPClient
 from clients.tinyfish import TinyfishClient
@@ -112,6 +113,11 @@ def get_client(app_slug: str, credentials: dict[str, Any]) -> Any:
         )
     elif app_slug == "freshworks":
         client = FreshWorksClient(
+            credentials["domain"],
+            credentials["api_key"],
+        )
+    elif app_slug == "freshservice":
+        client = FreshserviceClient(
             credentials["domain"],
             credentials["api_key"],
         )

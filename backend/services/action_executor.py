@@ -191,6 +191,25 @@ async def execute_action(
             else:
                 raise ValueError(f"Unknown Jira action: {action_name}")
 
+        # ── Freshservice (ITSM) ──────────────────────────────
+        elif app_slug == "freshservice":
+            if action_name == "create_ticket":
+                result = await client.create_ticket(params)
+            elif action_name == "update_ticket":
+                result = await client.update_ticket(params["ticket_id"], params)
+            elif action_name == "get_ticket":
+                result = await client.get_ticket(params["ticket_id"])
+            elif action_name == "list_tickets":
+                result = await client.list_tickets(params)
+            elif action_name == "close_ticket":
+                result = await client.close_ticket(params["ticket_id"], params.get("close_notes", ""))
+            elif action_name == "create_service_request":
+                result = await client.create_service_request(params["catalog_item_id"], params)
+            elif action_name == "add_ticket_note":
+                result = await client.add_ticket_note(params["ticket_id"], params["body"], params.get("private", True))
+            else:
+                raise ValueError(f"Unknown Freshservice action: {action_name}")
+
         # ── FreshWorks ────────────────────────────────────────
         elif app_slug == "freshworks":
             if action_name == "create_ticket":

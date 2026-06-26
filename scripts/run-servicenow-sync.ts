@@ -7,7 +7,7 @@ import { GoogleGenerativeAI, TaskType } from '@google/generative-ai'
 const prisma = new PrismaClient()
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!)
 const embeddingModel = genAI.getGenerativeModel({ model: 'gemini-embedding-001' })
-const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
 const BASE_URL = process.env.SERVICENOW_BASE_URL || 'https://dev285187.service-now.com'
 const SN_USER = process.env.SERVICENOW_USER_ID!

@@ -17,7 +17,7 @@ class Agent(Base):
     description = Column(Text, nullable=True)
     role = Column(Text, nullable=True)
     steps = Column(Text, nullable=True)
-    model = Column(String, default="gemini-2.0-flash")
+    model = Column(String, default="gemini-2.5-flash")
     icon = Column(String, nullable=True)
     color = Column(String, default="#3B82F6")
     status = Column(String, default="active")
