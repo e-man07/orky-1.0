@@ -1,528 +1,542 @@
+# ORKY
 
-# ORKY - Agentic AI Platform for the Enterprise
+> **AI-powered infrastructure orchestration across the tools enterprises already use.**
 
-ORKY is an AI-powered enterprise assistant that unifies knowledge across HR, IT, CRM, and compliance systems into one conversational interface. It provides role-aware answers, executes multi-step agentic workflows, and connects 70+ SaaS applications with 500+ available actions — all with zero information leakage.
+ORKY turns a natural-language infrastructure request into an executable, multi-step workflow across AWS, ServiceNow, Jira, Slack, and SharePoint.
 
-Built with Next.js, FastAPI, PostgreSQL (pgvector), and Google Gemini.
+Instead of generating instructions or Terraform and leaving the execution to a human, ORKY can **understand the request, coordinate multiple agents, execute real API actions, pause for human approval, validate the result, and document what happened.**
+
+### Demo
+
+**Live:** http://demo.orky.io/
+
+**Demo video:** https://drive.google.com/file/d/1Qqa6J-YHDtdCU5-qABtZb9WbZS32xvat/view?usp=sharing
+
+**Repository:** https://github.com/e-man07/orky-1.0
 
 ---
 
-## Table of Contents
+## What I built
 
-- [Architecture](#architecture)
-- [Key Features](#key-features)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [Database](#database)
-- [Authentication](#authentication)
-- [AI & RAG Pipeline](#ai--rag-pipeline)
-- [Workflow System](#workflow-system)
-- [Connected Applications](#connected-applications)
-- [API Reference](#api-reference)
-- [Scripts & Utilities](#scripts--utilities)
+ORKY started from a simple question:
+
+> **What if you could ask for infrastructure the same way you ask a coworker?**
+
+For example:
+
+```text
+Create a t2.micro EC2 instance for the staging API in us-east-1.
+```
+
+ORKY can turn that single request into a workflow:
+
+```text
+Natural language request
+        ↓
+Understand intent
+        ↓
+Create ServiceNow / Jira ticket
+        ↓
+Request approval through Slack
+        ↓
+Wait for human approval
+        ↓
+Provision resource in AWS
+        ↓
+Validate deployment
+        ↓
+Generate documentation in SharePoint
+        ↓
+Close ticket
+        ↓
+Notify the user
+```
+
+The interesting part isn't simply calling an LLM.
+
+The system has to coordinate **multiple tools, agents, workflow state, approvals, credentials, failures, and real external side effects**.
+
+---
+
+## Why it's different from an LLM wrapper
+
+A typical AI infrastructure tool might do this:
+
+```text
+User → LLM → Terraform / code → Human executes it
+```
+
+ORKY is designed more like:
+
+```text
+User
+ ↓
+Orchestrator Agent
+ ↓
+Specialized Agents
+ ↓
+Real external systems
+ ↓
+Workflow Engine
+ ↓
+Validation + audit trail
+```
+
+The model decides how to interpret and coordinate the request, while deterministic application logic handles workflow state, approvals, execution, and system integrations.
+
+This lets an AI agent operate inside an actual enterprise workflow rather than just producing text.
 
 ---
 
 ## Architecture
 
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                         ORKY FRONTEND                        │
+│                                                              │
+│   Chat UI        Workflow Management       Settings          │
+│                                                              │
+│                    Next.js / React                           │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                         REST + WebSocket
+                               │
+┌──────────────────────────────▼───────────────────────────────┐
+│                       FASTAPI BACKEND                        │
+│                                                              │
+│                  ┌────────────────────┐                      │
+│                  │ Orchestrator Agent │                      │
+│                  │                    │                      │
+│                  │ Intent parsing     │                      │
+│                  │ Agent delegation  │                      │
+│                  │ Tool coordination │                      │
+│                  └─────────┬──────────┘                      │
+│                            │                                 │
+│          ┌─────────────────┼──────────────────┐              │
+│          │                 │                  │              │
+│          ▼                 ▼                  ▼              │
+│    Compliance          Execution          Monitoring        │
+│      Agent               Agent               Agent           │
+│          │                 │                  │              │
+│     ServiceNow           AWS              Validation         │
+│     Jira                 EC2              Checks             │
+│                          S3                                  │
+│                                                              │
+│                  ┌────────────────────┐                      │
+│                  │  Workflow Engine   │                      │
+│                  │                    │                      │
+│                  │ State management   │                      │
+│                  │ Approval gates     │                      │
+│                  │ Pause / resume     │                      │
+│                  │ Sequential steps   │                      │
+│                  │ Conditional logic  │                      │
+│                  └────────────────────┘                      │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+          ┌────────────────────┼─────────────────────┐
+          │                    │                     │
+          ▼                    ▼                     ▼
+       AWS                ServiceNow              Slack
+       Jira               SharePoint              Gemini
 ```
-                          +-------------------+
-                          |   Google OAuth    |
-                          +--------+----------+
-                                   |
-                    +--------------v--------------+
-                    |     Next.js Frontend        |
-                    |     (port 3000)             |
-                    |  NextAuth + JWT + SSE       |
-                    +--------------+--------------+
-                                   | Bearer JWT
-                    +--------------v--------------+
-                    |     FastAPI Backend          |
-                    |     (port 8000)              |
-                    |  Chat | Workflows | RAG      |
-                    +-+----------+----------+------+
-                      |          |          |
-             +--------v--+  +---v----+  +--v-----------+
-             | PostgreSQL |  | Gemini |  | 70+ App      |
-             | + pgvector |  |  API   |  | Integrations |
-             |  (Neon)    |  |        |  | (clients/)   |
-             +------------+  +--------+  +--------------+
-```
-
-**Frontend** (Next.js 14) handles authentication, chat UI, and admin pages. It communicates with the backend via `apiFetch()` which attaches a JWT Bearer token to every request.
-
-**Backend** (FastAPI) handles intent classification, RAG search, action execution, and workflow orchestration. It streams real-time progress to the frontend via Server-Sent Events (SSE).
-
-**Database** (Neon PostgreSQL) stores users, knowledge articles, chat history, workflow definitions, and 768-dimensional vector embeddings for semantic search via pgvector.
 
 ---
 
-## Key Features
+## Core capabilities
 
-**Context-Aware Q&A** - Every employee gets answers filtered by their role, department, and designation band. No information leakage.
+### 🤖 Agentic orchestration
 
-**Multi-Step Agentic Workflows** - Chain multiple AI agents that execute real actions across connected apps, with real-time progress streaming, file upload support, and automatic email notifications on completion.
+ORKY uses a coordinator agent to interpret requests and delegate work to specialized agents.
 
-**70+ App Integrations** - ServiceNow, Jira, Slack, AWS, Salesforce, SAP, Snowflake, SharePoint, and many more. Each with multiple actions (create tickets, send messages, provision instances, etc.).
+- Natural-language intent parsing
+- Multi-turn conversations
+- Agent delegation
+- Tool selection
+- Context-aware execution
+- Multi-step workflows
 
-**RAG with Access Control** - Knowledge base articles are chunked, embedded, and filtered by user access criteria at query time. Only authorized content surfaces in responses.
+### 🔄 Workflow engine
 
-**Conversation Memory** - Past chat messages are embedded and retrieved for context, allowing the assistant to recall previous interactions.
+Infrastructure operations rarely consist of a single API call.
 
-**Document Processing** - Upload invoices and documents for AI-powered extraction via AWS Textract, with validation and rejection handling.
+ORKY supports:
+
+- Sequential execution
+- Conditional logic
+- Approval gates
+- Pause and resume
+- Long-running workflows
+- Workflow templates
+- State management
+- Execution history
+
+### 👤 Human-in-the-loop
+
+AI doesn't have to blindly execute every action.
+
+ORKY can stop at critical points and wait for a human approval before continuing.
+
+For example:
+
+```text
+AI creates ServiceNow request
+        ↓
+Slack approval request
+        ↓
+Human approves
+        ↓
+Workflow resumes
+        ↓
+AWS resource is provisioned
+```
+
+### ☁️ Real infrastructure actions
+
+ORKY isn't limited to generating infrastructure code.
+
+It can interact with real systems through APIs and MCP-based integrations.
+
+**AWS**
+
+- EC2
+- S3
+- Security groups
+- Resource management
+- Resource tagging
+
+**ServiceNow**
+
+- RITM creation
+- Incident management
+- Approval workflows
+- Ticket closure
+
+**Jira**
+
+- Issue creation
+- Project management
+- Status transitions
+- Comments
+
+**Slack**
+
+- Approval requests
+- Interactive buttons
+- Notifications
+- Threaded messages
+
+**SharePoint**
+
+- Document upload/download
+- Folder management
+- Automatic infrastructure documentation
 
 ---
 
-## Tech Stack
+## Example workflow
 
-### Frontend
-| Technology | Purpose |
-|---|---|
-| Next.js 14 | React framework (App Router) |
-| NextAuth v4 | Google OAuth + JWT sessions |
-| Tailwind CSS | Utility-first styling |
-| shadcn/ui (Radix) | Component library |
-| Motion | Animations |
-| Lucide React | Icons |
-| react-markdown | Markdown rendering |
+A user asks:
+
+```text
+Create a t2.micro EC2 instance for the staging API in us-east-1.
+```
+
+ORKY can execute:
+
+**1. Parse the request**
+
+Gemini extracts the required infrastructure parameters.
+
+**2. Create a compliance request**
+
+A ServiceNow or Jira ticket is created.
+
+**3. Request approval**
+
+The request is sent to Slack with approval controls.
+
+**4. Wait**
+
+The workflow pauses until an authorized user approves it.
+
+**5. Provision**
+
+The execution agent provisions the EC2 instance through AWS.
+
+**6. Validate**
+
+The monitoring agent verifies that the deployment is healthy.
+
+**7. Document**
+
+ORKY generates the infrastructure documentation and stores it in SharePoint.
+
+**8. Close**
+
+The original ticket is updated and closed.
+
+**9. Notify**
+
+The user receives the final result.
+
+---
+
+## Project scale
+
+The current implementation includes:
+
+- **~10,000 lines of Python**
+- **6 specialized agents**
+- **30+ REST API endpoints**
+- **6 external integrations**
+- Multi-step workflow engine
+- Human approval gates
+- Real-time execution updates
+- OAuth authentication
+- Encrypted credential storage
+- Execution and agent logs
+- PostgreSQL persistence
+- Redis-based realtime infrastructure
+
+---
+
+## Security
+
+Because ORKY interacts with infrastructure and enterprise systems, credential handling is a core part of the architecture.
+
+### Authentication
+
+- Google OAuth 2.0
+- NextAuth.js
+- HTTP-only session cookies
+- JWT-based sessions
+
+### Credential storage
+
+- Fernet encryption
+- Per-user credential isolation
+- Environment-specific encryption keys
+- Credentials excluded from logs and error output
+
+### Network security
+
+- HTTPS in production
+- TLS database connections
+- Restricted CORS origins
+- Secure WebSocket connections
+
+### Auditability
+
+- Execution history
+- Agent activity logs
+- Infrastructure change records
+- Approval workflows
+- Workflow state tracking
+
+---
+
+## Tech stack
 
 ### Backend
-| Technology | Purpose |
+
+| Component | Technology |
 |---|---|
-| FastAPI | Async Python web framework |
-| SQLAlchemy 2.0 | Async ORM |
-| pgvector | Vector similarity search |
-| Google Generative AI | Gemini embeddings + chat |
-| python-jose | JWT validation |
-| httpx | Async HTTP client |
-| boto3 | AWS SDK (S3, EC2, Textract) |
-| snowflake-connector | Data warehouse queries |
+| Framework | FastAPI |
+| Language | Python 3.11+ |
+| Database | PostgreSQL / Neon |
+| ORM | SQLModel |
+| Cache / PubSub | Redis |
+| AI | Google Gemini |
+| AWS | Boto3 + MCP |
+| Migrations | Alembic |
+
+### Frontend
+
+| Component | Technology |
+|---|---|
+| Framework | Next.js 14 |
+| Language | TypeScript |
+| UI | React |
+| Styling | Tailwind CSS |
+| Components | Radix UI / shadcn/ui |
+| State | Zustand |
+| Data fetching | TanStack Query |
+| Authentication | NextAuth.js |
 
 ### Infrastructure
-| Technology | Purpose |
+
+| Component | Technology |
 |---|---|
-| PostgreSQL (Neon) | Serverless database |
-| pgvector extension | 768-dim vector storage |
-| Prisma | Schema management & migrations |
-| Google Gemini | LLM (gemini-2.0-flash) + embeddings (gemini-embedding-001) |
+| Frontend hosting | Vercel |
+| Backend hosting | Render |
+| Database | Neon PostgreSQL |
+| Cache | Redis Cloud |
+| CI/CD | GitHub Actions |
 
 ---
 
-## Project Structure
+## Repository structure
 
-```
-orky_hackathon/
-├── backend/                    # FastAPI Python server
-│   ├── main.py                 # App entry point, CORS, routers
-│   ├── config.py               # Pydantic settings
-│   ├── database.py             # SQLAlchemy async engine
-│   ├── middleware/
-│   │   └── auth.py             # JWT validation → User
-│   ├── models/                 # SQLAlchemy ORM models
-│   │   ├── user.py             # User, UserRole, UserCriteria
-│   │   ├── knowledge.py        # KnowledgeArticle, ArticleChunk
-│   │   ├── app.py              # App, AppAction
-│   │   ├── agent.py            # Agent, AgentAction
-│   │   ├── workflow.py         # Workflow, WorkflowExecution, StepExecution
-│   │   └── chat.py             # ChatSession, ChatMessage
-│   ├── routers/                # API route handlers
-│   │   ├── chat.py             # /api/chat — messaging + SSE streaming
-│   │   ├── agents.py           # /api/agents — CRUD
-│   │   ├── workflows.py        # /api/workflows — CRUD + execution
-│   │   ├── apps.py             # /api/apps — credentials management
-│   │   ├── auth.py             # /api/auth — user profile
-│   │   └── executions.py       # /api/executions — logs
-│   ├── services/               # Core business logic
-│   │   ├── gemini.py           # LLM: embeddings, chat, intent, function calling
-│   │   ├── chat_orchestrator.py # Routes messages to KB/actions/workflows
-│   │   ├── workflow_engine.py  # Sequential agent orchestration
-│   │   ├── agent_executor.py   # Single agent function-calling loop
-│   │   ├── action_executor.py  # Dispatches actions to app clients
-│   │   └── rag/
-│   │       ├── pipeline.py     # Full RAG: access → search → generate
-│   │       └── search.py       # pgvector similarity search
-│   ├── clients/                # External app integrations (17 clients)
-│   │   ├── client_factory.py   # Factory pattern + caching
-│   │   ├── servicenow.py       # ITSM: incidents, RITMs, users
-│   │   ├── aws.py              # EC2, S3, Textract
-│   │   ├── jira.py             # Issues, transitions, comments
-│   │   ├── slack.py            # Messages, approvals
-│   │   ├── sharepoint.py       # Documents via Microsoft Graph
-│   │   ├── snowflake_client.py # SQL queries, table schemas
-│   │   ├── salesforce.py       # Leads, cases, SOQL
-│   │   ├── sap.py              # Purchase orders, financials
-│   │   ├── azure.py            # VMs, Log Analytics
-│   │   ├── workday.py          # Workers, positions, time off
-│   │   ├── o365.py             # Email, calendar (Graph API)
-│   │   ├── whatsapp.py         # Business API messaging
-│   │   ├── confluence.py       # Wiki pages, search
-│   │   ├── freshworks.py       # Ticketing
-│   │   ├── docusign.py         # Envelope signing
-│   │   ├── adp.py              # Payroll, worker management
-│   │   └── tinyfish.py         # GST/tax compliance
+```text
+orky-1.0/
+│
+├── backend/
+│   ├── src/
+│   │   ├── agents/
+│   │   ├── api/
+│   │   ├── workflows/
+│   │   ├── integrations/
+│   │   ├── models/
+│   │   └── services/
+│   │
+│   ├── tests/
 │   └── requirements.txt
-├── src/                        # Next.js frontend
+│
+├── frontend/
 │   ├── app/
-│   │   ├── page.tsx            # Landing page
-│   │   ├── chat/page.tsx       # Main chat interface
-│   │   ├── workflows/page.tsx  # Workflow builder
-│   │   ├── agents/page.tsx     # Agent management
-│   │   ├── apps/page.tsx       # App integrations
-│   │   ├── admin/page.tsx      # Admin dashboard
-│   │   ├── layout.tsx          # Root layout + providers
-│   │   └── api/auth/[...nextauth]/route.ts
 │   ├── components/
-│   │   ├── Sidebar.tsx         # Navigation + session list
-│   │   ├── ChatMessage.tsx     # Message rendering (sources, actions)
-│   │   ├── ChatInput.tsx       # Input with file attachment
-│   │   ├── WorkflowProgress.tsx # Real-time step progress
-│   │   ├── ExecutionMessage.tsx # Execution status display
-│   │   ├── ui/                 # shadcn/ui primitives
-│   │   ├── agents/             # AgentCard, AgentForm
-│   │   ├── workflows/          # WorkflowCard, WorkflowForm, ExecutionTimeline
-│   │   └── apps/               # App credential forms
+│   ├── hooks/
 │   ├── lib/
-│   │   ├── api.ts              # apiFetch + SSE parser
-│   │   ├── auth.ts             # NextAuth config (Google OAuth + JWT)
-│   │   └── prisma.ts           # Prisma client singleton
-│   ├── data/
-│   │   └── apps.ts             # 70+ app definitions with logos
-│   └── types/
-│       └── index.ts            # TypeScript interfaces
-├── prisma/
-│   ├── schema.prisma           # Database schema (28 models)
-│   └── migrations/             # SQL migration files
-├── scripts/                    # Data sync & seeding utilities
-├── public/logos/               # App integration logos
-└── package.json
+│   └── package.json
+│
+└── documentation/
 ```
 
 ---
 
-## Getting Started
+## Running locally
 
 ### Prerequisites
 
-- Node.js 18+
 - Python 3.11+
-- PostgreSQL with pgvector extension (or a Neon account)
-- Google Cloud project with OAuth credentials + Gemini API key
+- Node.js 18+
+- PostgreSQL
+- Redis
+- Google Gemini API key
+- AWS account
 
-### 1. Clone & install dependencies
+Optional:
+
+- ServiceNow
+- Slack
+- Jira
+- SharePoint
+
+### Clone
 
 ```bash
 git clone https://github.com/e-man07/orky-1.0.git
 cd orky-1.0
+```
 
-# Frontend
-npm install
+### Backend
 
-# Backend
+```bash
 cd backend
+
+python -m venv venv
+source venv/bin/activate
+
 pip install -r requirements.txt
-cd ..
 ```
 
-### 2. Configure environment variables
-
-Create `.env.local` in the project root and `backend/.env` (see [Environment Variables](#environment-variables) below).
-
-### 3. Set up the database
-
-```bash
-# Push schema to database
-npx prisma db push
-
-# Generate Prisma client
-npx prisma generate
-
-# Seed app integrations (run once)
-npx tsx scripts/seed-apps.ts
-```
-
-### 4. Start the servers
-
-```bash
-# Terminal 1 — Frontend (port 3000)
-npm run dev
-
-# Terminal 2 — Backend (port 8000)
-cd backend
-uvicorn main:app --reload
-```
-
-Open http://localhost:3000 and sign in with Google.
-
----
-
-## Environment Variables
-
-### Frontend (`.env.local`)
+Create your environment file:
 
 ```env
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=<32+ character random string>
-GOOGLE_CLIENT_ID=<Google OAuth client ID>
-GOOGLE_CLIENT_SECRET=<Google OAuth client secret>
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+DATABASE_URL=your_database_url
+REDIS_URL=your_redis_url
+GOOGLE_API_KEY=your_google_api_key
 
-### Backend (`backend/.env`)
+AWS_REGION=us-east-1
 
-```env
-# Database
-DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
+SECRET_KEY=your_secret_key
 
-# AI
-GOOGLE_API_KEY=<Gemini API key>
-
-# Auth (must match frontend)
-NEXTAUTH_SECRET=<same secret as frontend>
-
-# ServiceNow (optional)
-SERVICENOW_BASE_URL=https://instance.service-now.com
-SERVICENOW_USER_ID=<username>
-SERVICENOW_PASSWORD=<password>
-
-# SharePoint (optional)
-SHAREPOINT_TENANT_ID=<Azure AD tenant>
-SHAREPOINT_CLIENT_ID=<App registration ID>
-SHAREPOINT_CLIENT_SECRET=<App secret>
-SHAREPOINT_SITE=tenant.sharepoint.com/sites/SiteName
-
-# Email notifications (optional)
-SMTP_SERVER=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=<gmail address>
-SMTP_PASSWORD=<gmail app password>
-FROM_EMAIL=<gmail address>
-
-# CORS
 FRONTEND_URL=http://localhost:3000
 ```
 
-App-specific credentials (AWS, Jira, Slack, Snowflake, etc.) are stored per-app in the database via the Apps admin page, not as environment variables.
-
----
-
-## Database
-
-PostgreSQL with the **pgvector** extension for vector similarity search.
-
-### Key Tables
-
-| Table | Purpose |
-|---|---|
-| `users` | Employees with department, location, title |
-| `user_roles` | Role assignments per user |
-| `user_criteria` | Access control rules (e.g., designation bands) |
-| `knowledge_articles` | KB articles from ServiceNow/SharePoint/Excel |
-| `article_chunks` | Chunked article content with 768-dim embeddings |
-| `article_criteria` | Maps articles to access criteria |
-| `chat_sessions` | Per-user conversation sessions |
-| `chat_messages` | Messages with embeddings for memory retrieval |
-| `apps` | 70+ app definitions with credentials (JSON) |
-| `app_actions` | Actions per app with input schemas |
-| `agents` | AI agents with role, steps, model config |
-| `workflows` | Multi-step workflow definitions |
-| `workflow_executions` | Execution instances with state tracking |
-| `step_executions` | Per-step results (thinking, actions, output) |
-
-### Migrations
+Run migrations:
 
 ```bash
-npx prisma migrate dev --name <name>   # Create migration
-npx prisma db push                     # Push schema (no migration)
-npx prisma generate                    # Regenerate client
+alembic upgrade head
+```
+
+Start the backend:
+
+```bash
+uvicorn src.api.main:app --reload --port 8000
+```
+
+### Frontend
+
+```bash
+cd frontend
+
+npm install
+npm run dev
+```
+
+The frontend will be available at:
+
+```text
+http://localhost:3000
 ```
 
 ---
 
-## Authentication
+## Documentation
 
-```
-User → Google OAuth → NextAuth → JWT (HS256) → apiFetch → FastAPI → python-jose validates
-```
+For deeper technical details:
 
-1. User signs in via Google OAuth on the landing page
-2. NextAuth creates/finds the user in PostgreSQL via Prisma
-3. A JWT is signed with `NEXTAUTH_SECRET` (HS256, 30-day expiry)
-4. The frontend's `apiFetch()` attaches the JWT as a Bearer token on every API call
-5. FastAPI's `get_current_user()` middleware validates the JWT via python-jose and returns the User object with roles
-
-Role-based access filtering is applied in the RAG pipeline and workflow trigger matching.
-
----
-
-## AI & RAG Pipeline
-
-### Models
-
-| Model | Purpose | Dimensions |
-|---|---|---|
-| `gemini-embedding-001` | Text embeddings | 768 |
-| `gemini-2.0-flash` | Chat, intent classification, function calling | — |
-
-### How RAG Works
-
-1. **Offline**: Knowledge articles are chunked (~1500 chars), embedded, and stored with pgvector
-2. **Query time**: User message is embedded and compared via cosine similarity (threshold 0.5, top 5)
-3. **Access filtering**: Only articles matching the user's designation criteria are returned
-4. **Context assembly**: Relevant chunks + past chat messages are assembled into a prompt
-5. **Generation**: Gemini generates a grounded response with source citations
-
-### Intent Classification
-
-Every user message is classified into one of three intents:
-
-- **kb_query** - Answerable from the knowledge base (triggers RAG)
-- **workflow** - Action request like "create an incident" (triggers function calling or workflow)
-- **conversational** - Small talk, greetings (direct LLM response)
-
-### Function Calling
-
-For action intents, available app actions are converted to Gemini FunctionDeclarations. The model decides which actions to call, with what parameters, and the system executes them against real APIs in a loop (up to 5 rounds).
+- `TECHNICAL_DOCUMENTATION.md` — technical implementation details
+- `TECHNICAL_OVERVIEW.md` — architecture overview
+- `PROJECT_REPORT.md` — project status and progress
+- `SECURITY_COMPLIANCE_ALIGNMENT_REPORT.md` — security architecture
+- `WORKFLOW_SYSTEM_DESIGN.md` — workflow engine design
+- `CONVERSATIONAL_AGENT_RESEARCH.md` — conversational agent design
+- `JIRA_INTEGRATION_RESEARCH.md` — Jira integration
+- `SHAREPOINT_INTEGRATION_RESEARCH.md` — SharePoint integration
 
 ---
 
-## Workflow System
+## Status
 
-Workflows chain multiple AI agents that execute sequentially, passing results between steps.
+ORKY is an experimental enterprise orchestration platform with a working deployed demo.
 
-### Definition
+The current implementation covers:
 
-```
-Workflow
-├── name, description, trigger_roles[]
-└── WorkflowAgents[] (ordered by step_order)
-    ├── Agent (name, role, steps, model)
-    ├── step_order (1, 2, 3...)
-    └── taskPrompt (instruction override)
-```
-
-### Execution Flow
-
-```
-User message matched → Create execution → Run agents sequentially
-                                            │
-                         ┌──────────────────┼────────────────┐
-                         │                  │                │
-                    Step started      Step completed     Step failed
-                    (SSE event)       (SSE event)       (SSE event)
-                                          │                │
-                                    Next step...     Execution fails
-                                          │
-                                   All steps done
-                                          │
-                              ┌────────────┴──────────┐
-                              │                       │
-                       Mark completed           Send email
-                       (SSE: response)     (SSE: notification_sent)
-```
-
-### Features
-
-- **Real-time streaming** - SSE events for each step start/complete/fail
-- **Variable passing** - Step N output available to Step N+1 via shared variables
-- **File upload pause** - Workflow pauses if a step needs a file; resumes after upload
-- **Document rejection** - Agent can reject invalid documents and request re-upload
-- **Email notification** - Automatic completion email via Gmail SMTP (silent skip if unconfigured)
-- **AI workflow generation** - Describe what you want and Gemini generates the workflow definition
+- [x] Natural-language intent parsing
+- [x] Multi-agent orchestration
+- [x] AWS EC2 provisioning
+- [x] AWS S3 management
+- [x] ServiceNow integration
+- [x] Jira integration
+- [x] Slack approval workflows
+- [x] SharePoint integration
+- [x] Real-time execution updates
+- [x] Execution history
+- [x] Multi-turn conversations
+- [x] Workflow engine
+- [x] Workflow templates
+- [x] Google OAuth
+- [x] Encrypted credential storage
+- [x] Agent logging
+- [x] Production deployment
 
 ---
 
-## Connected Applications
+## Demo
 
-### Fully Integrated (17 clients with live API support)
+**Live application:**  
+http://demo.orky.io/
 
-| App | Category | Key Actions |
-|---|---|---|
-| **ServiceNow** | ITSM/HR | Create/update/close incidents, RITMs, user records |
-| **AWS** | Cloud | EC2 instances, S3 buckets, Textract document extraction |
-| **Jira** | Project Management | Create/update/transition issues, comments, search |
-| **Slack** | Communication | Send messages, approval requests |
-| **SharePoint** | Collaboration | List/upload/search files (Microsoft Graph) |
-| **Snowflake** | Data Warehouse | Execute queries, describe tables |
-| **Salesforce** | CRM | Leads, cases, opportunities, SOQL queries |
-| **SAP** | ERP | Purchase orders, material stock, financials |
-| **Azure** | Cloud | VMs, Log Analytics queries |
-| **Workday** | HR | Worker info, positions, time off |
-| **Office 365** | Productivity | Email, calendar events |
-| **WhatsApp** | Communication | Business API messaging |
-| **Confluence** | Collaboration | Wiki pages, content search |
-| **Freshworks** | Support | Ticket management |
-| **DocuSign** | Legal | Envelope signing, status checks |
-| **ADP** | Payroll | Worker details, payroll summaries |
-| **Tinyfish** | Compliance | GSTIN verification, tax validation |
+**Demo video:**  
+https://drive.google.com/file/d/1Qqa6J-YHDtdCU5-qABtZb9WbZS32xvat/view?usp=sharing
 
-### Pro Tier (30+ additional apps)
-
-Google Workspace, GitHub, GitLab, Datadog, PagerDuty, Splunk, Terraform, Jenkins, Zendesk, HubSpot, Tableau, Power BI, MongoDB, Redis, Okta, CrowdStrike, Twilio, Stripe, Microsoft Teams, Notion, Asana, and more.
+**GitHub:**  
+https://github.com/e-man07/orky-1.0
 
 ---
 
-## API Reference
+## License
 
-### Chat
-
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/chat/stream` | Send message with SSE streaming response |
-| POST | `/api/chat/upload` | Upload file to S3 |
-| GET | `/api/chat/sessions` | List user's chat sessions |
-| GET | `/api/chat/sessions/{id}/messages` | Load session messages |
-
-### Agents
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/agents` | List user's agents |
-| POST | `/api/agents` | Create agent with actions |
-| GET | `/api/agents/{id}` | Get agent details |
-| PATCH | `/api/agents/{id}` | Update agent |
-| DELETE | `/api/agents/{id}` | Delete agent |
-
-### Workflows
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/workflows` | List user's workflows |
-| POST | `/api/workflows` | Create workflow |
-| POST | `/api/workflows/{id}/execute` | Start workflow execution |
-| POST | `/api/workflows/generate` | AI-generate workflow from description |
-| PATCH | `/api/workflows/{id}` | Update workflow |
-| DELETE | `/api/workflows/{id}` | Delete workflow |
-
-### Apps
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/apps` | List all apps with action counts |
-| GET | `/api/apps/{id}` | Get app + actions |
-| POST | `/api/apps/{id}/credentials` | Save app credentials |
-
-### Auth
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/auth/me` | Current user profile + roles + criteria |
-
----
-
-## Scripts & Utilities
-
-| Script | Command | Purpose |
-|---|---|---|
-| `seed-apps.ts` | `npx tsx scripts/seed-apps.ts` | Create 70+ app definitions with actions |
-| `run-servicenow-sync.ts` | `npx tsx scripts/run-servicenow-sync.ts` | Import KB articles from ServiceNow |
-| `run-sharepoint-sync.ts` | `npx tsx scripts/run-sharepoint-sync.ts` | Import documents from SharePoint |
-| `sync-roles-criteria.ts` | `npx tsx scripts/sync-roles-criteria.ts` | Create designation-based access criteria |
-| `assign-roles.ts` | `npx tsx scripts/assign-roles.ts` | Sync user roles from ServiceNow |
-| `summarize-articles.ts` | `npx tsx scripts/summarize-articles.ts` | Clean/summarize raw article HTML |
-
----
-
-
-
+Proprietary.
